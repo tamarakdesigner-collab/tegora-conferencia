@@ -201,7 +201,6 @@ public class MainActivity extends Activity {
                         for (int t = 1; t <= 8 && s == null; t++) {
                             if (my != session) return;
                             try {
-                                ad.cancelDiscovery();
                                 BluetoothDevice d = ad.getRemoteDevice(address);
                                 BluetoothSocket c = (t % 2 == 1) ? d.createRfcommSocketToServiceRecord(SPP)
                                         : d.createInsecureRfcommSocketToServiceRecord(SPP);
