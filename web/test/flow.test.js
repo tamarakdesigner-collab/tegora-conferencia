@@ -1,0 +1,26 @@
+const {chromium}=require('playwright');
+(async()=>{
+const b=await chromium.launch();const ctx=await b.newContext({viewport:{width:400,height:800},acceptDownloads:true});const p=await ctx.newPage();
+const errs=[];p.on('pageerror',e=>errs.push('PAGEERR '+e.message));p.on('console',m=>{if(m.type()==='error'&&!/ERR_TUNNEL/.test(m.text()))errs.push('CONSOLE '+m.text())});
+await p.goto('file:///home/claude/tegora/out/index.html');await p.waitForTimeout(400);
+await p.screenshot({path:'out/h0.png'});
+await p.click('button[data-act=clientForm]');
+await p.fill('[data-f=nome]','João da Silva');await p.fill('[data-f=endereco]','Rua A, 10');await p.fill('[data-f=loja]','Loja X');await p.fill('[data-f=obs]','Obs cliente');
+await p.click('button[data-act=clientNew]');await p.waitForTimeout(150);
+await p.fill('#roomNames','Sala, Cozinha, Banheiro');await p.click('button[data-act=roomSugg][data-n="Dormitório"]');
+await p.click('button[data-act=roomsCreate]');await p.waitForTimeout(150);
+await p.screenshot({path:'out/h1.png',fullPage:false});
+console.log('rooms', await p.locator('button[data-act=roomOpen]').count());
+await p.click('button[data-act=roomOpen][data-i="1"]');await p.waitForTimeout(200);
+await p.click('button[data-act=drAdd]');await p.waitForTimeout(100);
+await p.fill('textarea[data-act=roomObs]','Tubo aparente');await p.press('textarea[data-act=roomObs]','Tab');
+await p.screenshot({path:'out/h2.png'});
+await p.click('.tab[data-v=walls]');await p.click('button[data-act=libCat][data-v=ar]');await p.click('button[data-act=libAdd][data-t=dreno]');await p.waitForTimeout(150);
+console.log('lib ar btns', await p.locator('.lib button').count());
+await p.screenshot({path:'out/h3.png'});
+await p.click('.tab[data-v=export]');
+const [d1]=await Promise.all([p.waitForEvent('download'),p.click('button[data-act=expPdf][data-v=all]')]);await d1.saveAs('out/ui.pdf');
+const [d2]=await Promise.all([p.waitForEvent('download'),p.click('button[data-act=expDxf][data-v=all]')]);await d2.saveAs('out/ui-dxf.zip');
+await p.click('button#back');await p.waitForTimeout(100);await p.click('button#back');await p.waitForTimeout(100);
+await p.screenshot({path:'out/h4.png'});
+console.log(errs.join('\n')||'no errors');await b.close();})();

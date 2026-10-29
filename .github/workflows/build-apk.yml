@@ -1,0 +1,37 @@
+name: Gerar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Compilar
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Publicar o APK na página Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk TegoraConferencia.apk
+          gh release delete apk-atual --yes --cleanup-tag || true
+          gh release create apk-atual TegoraConferencia.apk \
+            --title "Tégora Conferência (APK)" \
+            --notes "Baixe o arquivo TegoraConferencia.apk e instale no celular Android. Versão gerada em ${{ github.sha }}."

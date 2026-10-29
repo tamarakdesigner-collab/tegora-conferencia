@@ -1,0 +1,22 @@
+<title>Tégora Conferência</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>/*CSS*/</style>
+<div id="app">
+  <header class="gut"><button class="ibtn" id="back" aria-label="Voltar" hidden>‹</button><span id="logo" class="logo" aria-label="Tégora"></span><span class="pname" id="pname"></span><span class="seg" id="units"></span><button class="chip" id="bt" data-act="conectar" data-state="off">Trena ○</button><button class="ibtn" id="undo" disabled>↶ Desfazer</button></header>
+  <div class="cota"></div>
+  <nav class="rooms gut" id="rooms"></nav>
+  <section id="home" style="flex:1;min-height:0;overflow-y:auto" hidden></section>
+  <main>
+    <div id="left">
+    <div id="stage"><div id="cv"></div><div id="hud"><button id="fit" title="Ajustar à tela" aria-label="Ajustar à tela">⤢</button><button id="zin" aria-label="Aproximar">+</button><button id="zout" aria-label="Afastar">−</button></div><div id="hint" hidden></div></div>
+    <section id="sheet"><div id="grip" role="button" aria-label="Abrir ou fechar o editor"><i></i><span id="gtitle"></span></div><section id="panel" aria-live="polite"></section></section>
+    <nav class="tabs gut" role="tablist"><button class="tab" data-v="plan">Planta</button><button class="tab" data-v="walls">Paredes</button><button class="tab" data-v="ceil">Forro</button><button class="tab" data-v="photos">Fotos</button><button class="tab" data-v="export">Exportar</button></nav>
+    </div>
+
+  </main>
+  <footer class="gut"><span class="st"><span class="dot"></span>Trena GLM 50 C não conectada · leituras simuladas pelo botão “Medir”</span><button class="btn sec sm" id="conn">Conectar trena</button></footer>
+</div>
+<div id="toast" hidden></div>
+<script>/*JS*/</script>
