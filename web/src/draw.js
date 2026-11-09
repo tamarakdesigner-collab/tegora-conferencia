@@ -321,6 +321,23 @@ function drawCeil(c, room, o) {
       dimLine(c, [bb.x1, bb.y0], [bb.x1, bb.y1], [1, 0], 0, fmt(bb.h), { color: P.dim });
       if (bb.x0 - b.x0 > 1) dimLine(c, [b.x0, bb.y1 - 0], [bb.x0, bb.y1], [0, 1], 10, fmt(bb.x0 - b.x0), { color: P.dim, size: 7.5 });
       if (bb.y0 - b.y0 > 1) dimLine(c, [bb.x0, b.y0], [bb.x0, bb.y0], [-1, 0], 10, fmt(bb.y0 - b.y0), { color: P.dim, size: 7.5 });
+      if (el.sanca && b.x1 - bb.x1 > 1) dimLine(c, [bb.x1, bb.y0 - 0], [b.x1, bb.y0], [0, -1], 10, fmt(b.x1 - bb.x1), { color: P.dim, size: 7.5 });
+      if (el.sanca && b.y1 - bb.y1 > 1) dimLine(c, [bb.x1, bb.y1], [bb.x1, b.y1], [1, 0], 22, fmt(b.y1 - bb.y1), { color: P.dim, size: 7.5 });
+    }
+  }
+  /* vigas: retângulo tracejado ligando duas paredes */
+  LY(c, 'TG_VIGAS');
+  for (const bm of (room.beams || [])) {
+    const r = beamRect(bm), sel = o.selBeam === bm.id;
+    const x = v.X(r.x0), y = v.Y(r.y1), w = (r.x1 - r.x0) * v.s, h = (r.y1 - r.y0) * v.s;
+    G.rect(x, y, w, h, { fill: P.paper, stroke: sel ? P.sel : P.ink, w: (sel ? 2.2 : 1.2) * K, dash: [6 * K, 3 * K] });
+    G.line(x, y, x + w, y + h, { stroke: P.faint, w: 0.6 * K });
+    G.line(x + w, y, x, y + h, { stroke: P.faint, w: 0.6 * K });
+    G.text(x + w / 2, y + h / 2 - (bm.o === 'h' ? 9 * K : 0), bm.name, { size: 7.4 * K, bold: true, fill: P.ink });
+    if (c.hit) G.hitRect(x - 8, y - 8, w + 16, h + 16, 'b:' + bm.id);
+    if (sel) {
+      if (bm.o === 'h') { dimLine(c, [r.x0, r.y1], [r.x1, r.y1], [0, 1], 6, fmt(r.x1 - r.x0), { color: P.dim }); dimLine(c, [r.x1, r.y0], [r.x1, r.y1], [1, 0], 6, fmt(bm.t), { color: P.dim, size: 7.5 }); }
+      else { dimLine(c, [r.x1, r.y0], [r.x1, r.y1], [1, 0], 6, fmt(r.y1 - r.y0), { color: P.dim }); dimLine(c, [r.x0, r.y0], [r.x1, r.y0], [0, -1], 6, fmt(bm.t), { color: P.dim, size: 7.5 }); }
     }
   }
 }
@@ -518,6 +535,20 @@ function drawWall(c, room, wi, o) {
       if (c.hit) G.hitLine(X0, y, X1, y, 'mk:' + m.id, 16);
       G.text(X0 + 3 * K, y - 5 * K, fmt(m.pos), { size: 7 * K, font: 'mono', fill: P.dim });
     }
+  }
+  /* vigas que encostam nesta parede (tracejado) */
+  LY(c, 'TG_VIGAS');
+  for (const bm of (room.beams || [])) {
+    const r = beamRect(bm), us = [], tol = 3;
+    for (const p of [[r.x0, r.y0], [r.x1, r.y0], [r.x1, r.y1], [r.x0, r.y1]]) {
+      const rel = [p[0] - g.A[0], p[1] - g.A[1]], dist = Math.abs(rel[0] * g.nin[0] + rel[1] * g.nin[1]), u = rel[0] * g.d[0] + rel[1] * g.d[1];
+      if (dist < tol && u > -tol && u < g.L + tol) us.push(u);
+    }
+    if (us.length < 2) continue;
+    const u0 = Math.max(0, Math.min(...us)), u1 = Math.min(g.L, Math.max(...us));
+    if (u1 - u0 < 1) continue;
+    G.rect(v.X(u0), v.Y(bm.z + bm.h), (u1 - u0) * v.s, bm.h * v.s, { fill: P.paper, stroke: P.ink, w: 1.1 * K, dash: [5 * K, 3 * K] });
+    G.text(v.X((u0 + u1) / 2), v.Y(bm.z + bm.h / 2), bm.name + ' · ' + fmt(bm.h), { size: 7 * K, font: 'mono', fill: P.mut });
   }
   /* chão */
   G.line(X0 - 14 * K, YB, X1 + 14 * K, YB, { stroke: P.ink, w: 2 * K });

@@ -119,7 +119,7 @@ function renderStage() {
     drawWall(c, room, S.wall, { sel: UI.sel });
     hint = 'Toque num item e arraste para posicioná-lo · pinça para zoom';
   } else if (UI.tab === 'ceil') {
-    drawCeil(c, room, { selCeil: UI.selCeil, hitCeil: true });
+    drawCeil(c, room, { selCeil: UI.selCeil, selBeam: UI.selBeam, hitCeil: true });
     if (UI.draft) {
       const d = UI.draft, x0 = Math.min(d.a[0], d.b[0]), y0 = Math.min(d.a[1], d.b[1]), x1 = Math.max(d.a[0], d.b[0]), y1 = Math.max(d.a[1], d.b[1]);
       G.rect(v.X(x0), v.Y(y1), (x1 - x0) * v.s, (y1 - y0) * v.s, { fill: 'none', stroke: PAL_SCREEN.sel, w: 2, dash: [6, 4] });
@@ -127,7 +127,7 @@ function renderStage() {
     }
     const fs = UI.cstroke;
     if (fs && fs.length > 1) G.poly(fs.map(p => [v.X(p[0]), v.Y(p[1])]), { fill: 'none', stroke: PAL_SCREEN.sel, w: 3, close: false });
-    hint = UI.tool === 'draw' ? CEIL_HINT : UI.tool === 'free' ? 'Contorne a área da ' + UI.freeKind + ' com o dedo, dentro do ambiente · o contorno é ajustado em esquadro' : 'Toque num rebaixo para editar · arraste para mover';
+    hint = UI.tool === 'beam' ? 'Risque a viga de uma parede até a outra · as pontas encaixam sozinhas nas paredes próximas' : 'Toque num elemento ou viga para editar · arraste a sanca para mover (ela não passa das paredes)';
   } else if (UI.tab === 'photos') {
     const ph = room.photos.find(p => p.id === UI.selPhoto);
     if (ph) {
@@ -251,6 +251,7 @@ function ceilEditor(el, room) {
   if (el.trim === 'neg') h += `<div class="row" style="margin-top:8px">${fld('Negativo: espessura', el.tw, 'cTw', d, { meas: true })}${fld('Pé-direito do negativo', negH(room, el), 'cNh', d, { meas: true })}</div><p class="muted small" style="margin:4px 0 0">O negativo sobe acima do forro até este pé-direito (maior que o normal, ${fmt(room.H, UNIT, true)}).</p>`;
   if (el.kind === 'rect') {
     h += `<div class="row" style="margin-top:8px">${fld('A partir da parede esq.', el.x - b.x0, 'cX', d, { meas: true })}${fld('A partir da parede inferior', el.y - b.y0, 'cY', d, { meas: true })}</div>`;
+    h += `<div class="row" style="margin-top:8px">${fld('A partir da parede dir.', b.x1 - (el.x + el.w), 'cXr', d, { meas: true })}${fld('A partir da parede superior', b.y1 - (el.y + el.h), 'cYt', d, { meas: true })}</div>`;
     h += `<div class="row" style="margin-top:8px">${fld('Largura', el.w, 'cW', d, { meas: true })}${fld('Profundidade', el.h, 'cH', d, { meas: true })}</div>`;
   }
   const eo = el.eo || [];
@@ -261,16 +262,29 @@ function ceilEditor(el, room) {
   h += `<div class="row" style="margin-top:8px"><button class="btn dng sm" data-act="cDel">Excluir</button></div></div>`;
   return h;
 }
+function beamEditor(b, room) {
+  const bb = bbox(room.pts), d = { id: b.id }, r = beamRect(b);
+  const lowRef = b.o === 'h' ? 'da parede inferior' : 'da parede esquerda', hiRef = b.o === 'h' ? 'da parede superior' : 'da parede direita';
+  const lo = b.c0 - (b.o === 'h' ? bb.y0 : bb.x0), hi = (b.o === 'h' ? bb.y1 : bb.x1) - (b.c0 + b.t);
+  let h = `<h3>${eh(b.name)}</h3><div class="card"><div class="row">${fld('Nome', b.name, 'bName', d, { txt: true })}</div>`;
+  h += `<div class="row" style="margin-top:8px">${fld('Espessura', b.t, 'bT', d, { meas: true })}${fld('Altura da viga', b.h, 'bH', d, { meas: true })}</div>`;
+  h += `<div class="row" style="margin-top:8px">${fld('Altura do piso até a viga', b.z, 'bZ', d, { meas: true })}<div class="small muted" style="align-self:end">Topo a ${fmt(room.H - b.z - b.h)} da laje</div></div>`;
+  h += `<div class="row" style="margin-top:8px">${fld('Borda ' + lowRef, lo, 'bPos', d, { meas: true })}${fld('Borda ' + hiRef, hi, 'bPosHi', d, { meas: true })}</div>`;
+  h += `<p class="muted small" style="margin:6px 0 0">Comprimento entre paredes: ${fmt(b.s1 - b.s0)}. As pontas encaixam nas paredes quando a posição muda.</p>`;
+  h += `<div class="row" style="margin-top:8px"><button class="btn dng sm" data-act="bDel">Excluir viga</button></div></div>`;
+  return h;
+}
 function panelCeil() {
   if (!hasWalls(R())) return emptyNotice();
   const room = R();
   const hasRoom = room.ceil.some(e => e.kind === 'room');
-  let h = `<h2>Forro de gesso</h2><p class="muted small" style="margin:0 0 8px">O forro pode ser gerado automaticamente no formato da planta e editado depois: rodaforro, negativo, arestas recuadas (sanca) e rebaixos desenhados à mão livre.</p>`;
+  let h = `<h2>Forro de gesso</h2><p class="muted small" style="margin:0 0 8px">O forro é gerado automaticamente no formato da planta e pode ser editado. Acrescente sancas por medidas e vigas desenhadas à mão livre.</p>`;
   if (!hasRoom) h += `<div class="row" style="margin-bottom:8px"><button class="btn" data-act="cNewRoom">Gerar forro automático (padrão da planta)</button></div>`;
-  h += `<div class="row"><button class="btn sm ${UI.tool === 'free' && UI.freeKind === 'rebaixo' ? '' : 'sec'}" data-act="cFree" data-v="rebaixo">${UI.tool === 'free' && UI.freeKind === 'rebaixo' ? '✓ Desenhando rebaixo…' : 'Rebaixo à mão livre'}</button><button class="btn sm ${UI.tool === 'free' && UI.freeKind === 'sanca' ? '' : 'sec'}" data-act="cFree" data-v="sanca">${UI.tool === 'free' && UI.freeKind === 'sanca' ? '✓ Desenhando sanca…' : 'Sanca à mão livre'}</button></div>`;
-  h += `<div class="row" style="margin-top:8px"><button class="btn sec sm" data-act="cDraw">${UI.tool === 'draw' ? '✓ Desenhando — toque para sair' : 'Rebaixo retangular'}</button><button class="btn sec sm" data-act="cNewRect">+ Rebaixo por medidas</button></div>`;
+  h += `<div class="row"><button class="btn sec sm" data-act="cNewSanca">+ Sanca por medidas</button><button class="btn sm ${UI.tool === 'beam' ? '' : 'sec'}" data-act="bFree">${UI.tool === 'beam' ? '✓ Riscando viga — toque para sair' : 'Viga à mão livre'}</button></div>`;
   h += `<h3>Elementos</h3>`;
   h += room.ceil.length ? `<div class="list">${room.ceil.map(e => `<button data-act="cSel" data-id="${e.id}" aria-pressed="${e.id === UI.selCeil}"><span>${eh(e.name)}</span><span class="m">${e.sanca ? 'sanca ' + fmt(e.drop) : e.drop ? 'rebaixo ' + fmt(e.drop) : 'rente à laje'}</span></button>`).join('')}</div>` : '<p class="muted small">Nenhum elemento de forro ainda.</p>';
+  if ((room.beams || []).length) h += `<h3>Vigas</h3><div class="list">${room.beams.map(b => `<button data-act="bSel" data-id="${b.id}" aria-pressed="${b.id === UI.selBeam}"><span>${eh(b.name)}</span><span class="m">${fmt(b.s1 - b.s0)} · ${fmt(b.t)} × ${fmt(b.h)}</span></button>`).join('')}</div>`;
+  { const bm = (room.beams || []).find(b => b.id === UI.selBeam); if (bm) h += beamEditor(bm, room); }
   const el = room.ceil.find(e => e.id === UI.selCeil);
   if (el) h += ceilEditor(el, room);
   return h;
@@ -295,7 +309,7 @@ function panelPhotos() {
   return h;
 }
 
-function pagesOf(rooms) { return rooms.reduce((n, r) => n + (hasWalls(r) ? 1 + (r.ceil.length ? 1 : 0) + liveWalls(r) : 0) + r.photos.length, 0); }
+function pagesOf(rooms) { return rooms.reduce((n, r) => n + (hasWalls(r) ? 1 + ((r.ceil.length || (r.beams || []).length) ? 1 : 0) + liveWalls(r) : 0) + r.photos.length, 0); }
 function panelExport() {
   const c = CL(), room = R();
   let h = `<h2>Exportar</h2><p class="muted small" style="margin:0 0 8px">Cliente: <b>${eh(c.nome || '—')}</b>. Os dados do cliente ficam na tela do cliente.</p>`;
@@ -764,6 +778,26 @@ const A = {
   btLaser() { btSend(CMD_LASER, 'laser C0 56 01 00 1E'); },
   btCopy() { const t = BT.trace.join('\n'); try { navigator.clipboard.writeText(t).then(() => toast('Registro copiado.'), () => toast('Não consegui copiar: selecione o texto do registro.')); } catch (e) { toast('Não consegui copiar: selecione o texto do registro.'); } },
   /* forro */
+  cNewSanca() {
+    tryMut(() => {
+      const room = R(), b = bbox(room.pts), n = room.ceil.filter(q => q.sanca).length + 1;
+      let w = Math.min(1500, b.w / 2), h = Math.min(1000, b.h / 2);
+      const e = newCeil('rect', room, { sanca: true, name: 'Sanca ' + n, drop: 150, trim: 'neg', tw: 60, nh: room.H + 100, w, h, x: b.x0 + (b.w - w) / 2, y: b.y0 + (b.h - h) / 2 });
+      for (let k = 0; k < 8 && !rectInsideRoom(e.x, e.y, e.w, e.h, room.pts); k++) { e.w = Math.max(200, e.w * 0.7); e.h = Math.max(200, e.h * 0.7); e.x = b.x0 + (b.w - e.w) / 2; e.y = b.y0 + (b.h - e.h) / 2; }
+      if (!rectInsideRoom(e.x, e.y, e.w, e.h, room.pts)) return { ok: false, msg: 'Não coube uma sanca no centro. Ajuste o ambiente.' };
+      room.ceil.push(e); UI.selCeil = e.id; UI.selBeam = null; UI.tool = null;
+    });
+  },
+  bFree() { UI.tool = UI.tool === 'beam' ? null : 'beam'; UI.cstroke = null; if (UI.tool) setSheet('min'); renderAll(); },
+  bSel(el) { UI.selBeam = el.dataset.id; UI.selCeil = null; renderAll(); },
+  _bEdit(el, fn, min) { const v = num(el, min == null ? 0 : min); if (v == null) return; const bm = R().beams.find(x => x.id === el.dataset.id); if (!bm) return; tryMut(() => { const old = JSON.stringify(bm); fn(bm, v); beamResnap(R(), bm); if (!beamInsideRoom(R(), bm)) { Object.assign(bm, JSON.parse(old)); return { ok: false, msg: 'A viga precisa ficar dentro das paredes do ambiente.' }; } }); },
+  bName(el) { const bm = R().beams.find(x => x.id === el.dataset.id); tryMut(() => { bm.name = el.value.trim() || bm.name; }); },
+  bT(el) { A._bEdit(el, (b, v) => { b.t = v; }, 20); },
+  bH(el) { const v = num(el, 20); if (v == null) return; const bm = R().beams.find(x => x.id === el.dataset.id); tryMut(() => { if (bm.z + v > R().H + 0.5) return { ok: false, msg: 'A viga passaria do pé-direito.' }; bm.h = v; }); },
+  bZ(el) { const v = num(el, 0); if (v == null) return; const bm = R().beams.find(x => x.id === el.dataset.id); tryMut(() => { if (v + bm.h > R().H + 0.5) return { ok: false, msg: 'A viga passaria do pé-direito.' }; bm.z = v; }); },
+  bPos(el) { const bb = bbox(R().pts); A._bEdit(el, (b, v) => { b.c0 = (b.o === 'h' ? bb.y0 : bb.x0) + v; }); },
+  bPosHi(el) { const bb = bbox(R().pts); A._bEdit(el, (b, v) => { b.c0 = (b.o === 'h' ? bb.y1 : bb.x1) - v - b.t; }); },
+  bDel() { const id = UI.selBeam; tryMut(() => { R().beams = R().beams.filter(x => x.id !== id); UI.selBeam = null; }); },
   cNewRoom() { tryMut(() => { const e = newCeil('room', R()); R().ceil.unshift(e); UI.selCeil = e.id; }); },
   cNewRect() {
     tryMut(() => {
@@ -794,19 +828,19 @@ const A = {
   },
   cEoReset(el) { const e = R().ceil.find(x => x.id === el.dataset.id); tryMut(() => { e.eo = []; }); },
   cDraw() { UI.tool = UI.tool === 'draw' ? null : 'draw'; UI.draft = null; renderAll(); },
-  cSel(el) { UI.selCeil = el.dataset.id; renderAll(); },
+  cSel(el) { UI.selCeil = el.dataset.id; UI.selBeam = null; renderAll(); },
   cName(el) { const e = R().ceil.find(x => x.id === el.dataset.id); tryMut(() => { e.name = el.value.trim() || e.name; }); },
   cDrop(el) { const v = num(el, 0); if (v == null) return; const e = R().ceil.find(x => x.id === el.dataset.id); tryMut(() => { e.drop = Math.min(v, R().H - 500); }); },
   cTrim(el) { const e = R().ceil.find(x => x.id === el.dataset.id); tryMut(() => { e.trim = el.value; if (e.trim === 'neg' && !e.nh) e.nh = R().H + 100; }); },
   cTw(el) { const v = num(el, 1); if (v == null) return; const e = R().ceil.find(x => x.id === el.dataset.id); tryMut(() => { e.tw = v; }); },
   cTh(el) { const v = num(el, 1); if (v == null) return; const e = R().ceil.find(x => x.id === el.dataset.id); tryMut(() => { e.th = v; }); },
-  cX(el) { A._cRect(el, 'x'); }, cY(el) { A._cRect(el, 'y'); }, cW(el) { A._cRect(el, 'w'); }, cH(el) { A._cRect(el, 'h'); },
+  cXr(el) { A._cRect(el, 'xr'); }, cYt(el) { A._cRect(el, 'yt'); }, cX(el) { A._cRect(el, 'x'); }, cY(el) { A._cRect(el, 'y'); }, cW(el) { A._cRect(el, 'w'); }, cH(el) { A._cRect(el, 'h'); },
   _cRect(el, k) {
     const v = num(el, 0); if (v == null) return;
     const b = bbox(R().pts), e = R().ceil.find(x => x.id === el.dataset.id);
     tryMut(() => {
-      if (k === 'x') e.x = b.x0 + v; else if (k === 'y') e.y = b.y0 + v; else e[k] = v;
-      if (!rectInsideRoom(e.x, e.y, e.w, e.h, R().pts)) return { ok: false, msg: 'O forro precisa ficar dentro das paredes do ambiente.' };
+      if (k === 'x') e.x = b.x0 + v; else if (k === 'y') e.y = b.y0 + v; else if (k === 'xr') e.x = b.x1 - v - e.w; else if (k === 'yt') e.y = b.y1 - v - e.h; else e[k] = v;
+      if (!rectInsideRoom(e.x, e.y, e.w, e.h, R().pts)) return { ok: false, msg: e.sanca ? 'A sanca não pode ultrapassar os limites das paredes.' : 'O forro precisa ficar dentro das paredes do ambiente.' };
     });
   },
   cDel() { const id = UI.selCeil; tryMut(() => { R().ceil = R().ceil.filter(x => x.id !== id); UI.selCeil = null; }); },
@@ -996,11 +1030,13 @@ function onDown(e) {
     const it = room.items.find(x => x.id === id.slice(2));
     if (it) { drag.kind = 'item'; drag.it = it; drag.off = [w[0] - it.u, w[1] - zc(it)]; UI.sel = it.id; openSheet(); drag.snap = JSON.stringify(S); drag.moved0 = false; renderPanel(); renderStage(); }
   } else if (UI.tab === 'ceil') {
-    if (UI.tool === 'free') { drag.kind = 'ctrace'; UI.cstroke = [w]; }
+    if (UI.tool === 'beam') { drag.kind = 'btrace'; UI.cstroke = [w]; }
+    else if (UI.tool === 'free') { drag.kind = 'ctrace'; UI.cstroke = [w]; }
     else if (UI.tool === 'draw') { drag.kind = 'draw'; const p = snapPt(w, v); UI.draft = { a: p, b: p }; }
+    else if (id && id.startsWith('b:')) { const bm = room.beams.find(x => x.id === id.slice(2)); if (bm) { UI.selBeam = bm.id; UI.selCeil = null; openSheet(); drag.kind = 'tapOnly'; renderPanel(); renderStage(); } }
     else if (id && id.startsWith('f:')) {
       const el = room.ceil.find(x => x.id === id.slice(2));
-      if (el) { UI.selCeil = el.id; openSheet(); drag.kind = el.kind === 'rect' ? 'fmove' : 'tapOnly'; drag.el = el; drag.off = [w[0] - el.x, w[1] - el.y]; drag.snap = JSON.stringify(S); renderPanel(); renderStage(); }
+      if (el) { UI.selCeil = el.id; UI.selBeam = null; openSheet(); drag.kind = el.kind === 'rect' ? 'fmove' : 'tapOnly'; drag.el = el; drag.off = [w[0] - el.x, w[1] - el.y]; drag.snap = JSON.stringify(S); renderPanel(); renderStage(); }
     }
   } else if (UI.tab === 'photos') {
     const ph = room.photos.find(p => p.id === UI.selPhoto);
@@ -1030,7 +1066,7 @@ function onMove(e) {
   const v = drag.v0, room = R();
   if (drag.kind === 'pan' || drag.kind === 'tapWall' || drag.kind === 'tapOnly') { setUV(new View(v.s, v.ox + dx, v.oy + dy)); drag.kind = drag.kind === 'tapOnly' ? 'pan' : 'pan'; renderStage(); return; }
   const w = curView().inv(px, py);
-  if (drag.kind === 'ctrace') { const l = UI.cstroke[UI.cstroke.length - 1]; if (Math.hypot(w[0] - l[0], w[1] - l[1]) > 4 / curView().s) UI.cstroke.push(w); renderStage(); return; }
+  if (drag.kind === 'ctrace' || drag.kind === 'btrace') { const l = UI.cstroke[UI.cstroke.length - 1]; if (Math.hypot(w[0] - l[0], w[1] - l[1]) > 4 / curView().s) UI.cstroke.push(w); renderStage(); return; }
   if (drag.kind === 'trace') { const l = UI.stroke[UI.stroke.length - 1]; if (Math.hypot(w[0] - l[0], w[1] - l[1]) > 4 / curView().s) UI.stroke.push(w); renderStage(); return; }
   if (drag.kind === 'corner') {
     const rr = JSON.parse(drag.room0), t = [rnd(w[0], 10), rnd(w[1], 10)];
@@ -1049,7 +1085,12 @@ function onMove(e) {
     UI.draft.b = snapPt(w, curView()); renderStage();
   } else if (drag.kind === 'fmove') {
     const el = drag.el;
-    el.x = rnd(w[0] - drag.off[0], 10); el.y = rnd(w[1] - drag.off[1], 10); renderStage();
+    const nx = rnd(w[0] - drag.off[0], 10), ny = rnd(w[1] - drag.off[1], 10), P = R().pts;
+    /* a sanca fica travada dentro das paredes durante todo o arraste: se não cabe, desliza só num eixo */
+    if (rectInsideRoom(nx, ny, el.w, el.h, P)) { el.x = nx; el.y = ny; }
+    else if (rectInsideRoom(nx, el.y, el.w, el.h, P)) el.x = nx;
+    else if (rectInsideRoom(el.x, ny, el.w, el.h, P)) el.y = ny;
+    renderStage();
   } else if (drag.kind === 'handle') {
     const n = phNorm(px, py, drag.ph), an = drag.an;
     if (drag.k === 1) { an.x1 = n[0]; an.y1 = n[1]; } else { an.x2 = n[0]; an.y2 = n[1]; }
@@ -1069,6 +1110,16 @@ function onUp(e) {
   const d = drag; drag = null;
   if (!d) return;
   const room = R();
+  if (d.kind === 'btrace') {
+    const st = UI.cstroke; UI.cstroke = null;
+    if (!st || st.length < 4) { renderStage(); return; }
+    const res = beamFromStroke(room, st);
+    if (!res.ok) { toast(res.msg); renderStage(); return; }
+    if (!beamInsideRoom(room, res.beam)) { toast('A viga precisa ficar dentro das paredes do ambiente.'); renderStage(); return; }
+    tryMut(() => { room.beams.push(res.beam); UI.selBeam = res.beam.id; UI.selCeil = null; UI.tool = null; setSheet('peek'); });
+    if (res.snapped < 2) toast('Viga criada. Uma ponta ficou longe de parede: ajuste pela posição.');
+    return;
+  }
   if (d.kind === 'ctrace') {
     const st = UI.cstroke; UI.cstroke = null;
     if (!st || st.length < 6) { renderStage(); return; }
@@ -1098,7 +1149,7 @@ function onUp(e) {
   if (d.kind === 'pan' && !d.moved) {
     if (UI.tab === 'walls' && UI.sel) { UI.sel = null; renderAll(); }
     else if (UI.tab === 'plan' && (UI.selDrain || UI.selCorner != null)) { UI.selDrain = null; UI.selCorner = null; renderAll(); }
-    else if (UI.tab === 'ceil' && UI.selCeil && UI.tool !== 'draw') { UI.selCeil = null; renderAll(); }
+    else if (UI.tab === 'ceil' && (UI.selCeil || UI.selBeam) && UI.tool !== 'draw') { UI.selCeil = null; UI.selBeam = null; renderAll(); }
     else if (UI.tab === 'photos' && UI.selAnn) { UI.selAnn = null; renderAll(); }
     return;
   }

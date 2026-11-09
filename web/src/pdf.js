@@ -134,6 +134,7 @@ function pdfCeilPage(doc, ctx, room, total) {
   G.text(sx, y, 'ELEMENTOS DO FORRO', { size: 7, bold: true, anchor: 'start', fill: P.accent });
   y += 8;
   const rows = room.ceil.map(e => [e.name + (e.sanca ? ' (sanca)' : '') + (e.eo && e.eo.some(q => q) ? ' *' : ''), e.drop ? fmt(e.drop) : 'rente', e.trim === 'roda' ? 'Roda ' + fmt(e.tw) + '×' + fmt(e.th) : e.trim === 'neg' ? 'Neg. e' + fmt(e.tw) + ' PD ' + fmt(negH(room, e)) : '—']);
+  for (const b of (room.beams || [])) rows.push([b.name + ' (viga)', 'z ' + fmt(b.z), fmt(b.t) + ' × ' + fmt(b.h) + ' · ' + fmt(b.s1 - b.s0)]);
   y = pdfTable(G, sx, y, [{ h: 'Elemento', w: sw - 62 - 78 }, { h: 'Rebaixo', w: 62, a: 'r' }, { h: 'Acabamento', w: 78 }], rows, { rh: 13, fs: 7 });
   y += 14;
   const lines = [
@@ -211,7 +212,7 @@ function buildPdf(state, photoBytes) {
   state.rooms.forEach((r, ri) => {
     if (hasWalls(r)) {
       pages.push(['plan', ri]);
-      if (r.ceil.length) pages.push(['ceil', ri]);
+      if (r.ceil.length || (r.beams || []).length) pages.push(['ceil', ri]);
       wallOrder(r).forEach(wi => pages.push(['wall', ri, wi]));
     }
     (r.photos || []).forEach((p, k) => pages.push(['photo', ri, k]));

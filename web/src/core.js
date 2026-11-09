@@ -207,7 +207,7 @@ function newRoom(name, W, Lg, H) {
   return {
     id: uid('r'), name: name || 'Ambiente', H: H || 2700, Hsrc: 'manual',
     pts: W ? [[W, 0], [0, 0], [0, Lg], [W, Lg]] : [], wsrc: W ? [null, null, null, null] : [],
-    items: [], ceil: [], photos: [], drains: [], obs: '', tw: 120, wt: [], wd: [], marks: [],
+    items: [], ceil: [], photos: [], drains: [], obs: '', tw: 120, wt: [], wd: [], marks: [], beams: [],
   };
 }
 function itemsOn(room, wall) {
@@ -360,6 +360,48 @@ function newCeil(kind, room, extra) {
   const el = { id: uid('f'), kind, name: kind === 'room' ? 'Forro do ambiente' : 'Forro rebaixado', drop: kind === 'room' ? 0 : 100, trim: 'none', tw: 30, th: 40, nh: room.H + 100 };
   if (kind === 'rect') Object.assign(el, { x: b.x0 + 300, y: b.y0 + 300, w: Math.min(1500, b.w - 600), h: Math.min(1000, b.h - 600) });
   return Object.assign(el, extra || {});
+}
+/* ---------- Vigas: retângulo entre paredes, referenciado pelas bordas ---------- */
+const BEAM_SNAP = 600;
+function beamRect(b) { return b.o === 'h' ? { x0: b.s0, x1: b.s1, y0: b.c0, y1: b.c0 + b.t } : { x0: b.c0, x1: b.c0 + b.t, y0: b.s0, y1: b.s1 }; }
+/* cruzamentos da linha de eixo da viga com as paredes (arestas sem parede excluídas) */
+function beamCross(room, o, c) {
+  const xs = [], P = room.pts, n = P.length;
+  for (let i = 0; i < n; i++) {
+    if (wdel(room, i)) continue;
+    const a = P[i], b = P[(i + 1) % n];
+    if (o === 'h') { if (Math.abs(a[0] - b[0]) < 1 && c >= Math.min(a[1], b[1]) - 0.5 && c <= Math.max(a[1], b[1]) + 0.5) xs.push(a[0]); }
+    else if (Math.abs(a[1] - b[1]) < 1 && c >= Math.min(a[0], b[0]) - 0.5 && c <= Math.max(a[0], b[0]) + 0.5) xs.push(a[1]);
+  }
+  return xs.sort((p, q) => p - q);
+}
+const nearest = (xs, v, R) => { let best = null; for (const x of xs) if (Math.abs(x - v) <= R && (best == null || Math.abs(x - v) < Math.abs(best - v))) best = x; return best; };
+/* traço à mão livre → viga com encaixe automático nas paredes próximas */
+function beamFromStroke(room, st) {
+  const xs = st.map(p => p[0]), ys = st.map(p => p[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const o = (x1 - x0) >= (y1 - y0) ? 'h' : 'v';
+  const lo = o === 'h' ? x0 : y0, hi = o === 'h' ? x1 : y1;
+  if (hi - lo < 300) return { ok: false, msg: 'Traço curto demais. Risque a viga de uma parede até a outra.' };
+  const t = 200, mid = (o === 'h' ? ys : xs).slice().sort((a, b) => a - b)[Math.floor(st.length / 2)];
+  const cs = beamCross(room, o, mid);
+  let s0 = nearest(cs, lo, BEAM_SNAP), s1 = nearest(cs, hi, BEAM_SNAP), snapped = 0;
+  if (s0 != null) snapped++; else s0 = rnd(lo, 10);
+  if (s1 != null) snapped++; else s1 = rnd(hi, 10);
+  if (s1 - s0 < 100) return { ok: false, msg: 'Não consegui ligar a viga entre duas paredes. Tente de novo.' };
+  const b = { id: uid('b'), name: 'Viga ' + ((room.beams || []).length + 1), o, c0: rnd(mid - t / 2, 10), t, s0, s1, h: 300, z: Math.max(0, room.H - 300) };
+  return { ok: true, beam: b, snapped };
+}
+/* depois de editar posição/espessura: religa as pontas nas paredes do novo alinhamento */
+function beamResnap(room, b) {
+  const cs = beamCross(room, b.o, b.c0 + b.t / 2), m = (b.s0 + b.s1) / 2;
+  const L = cs.filter(x => x <= m), R = cs.filter(x => x >= m);
+  if (L.length && R.length) { b.s0 = L[L.length - 1]; b.s1 = R[0]; }
+  return b;
+}
+function beamInsideRoom(room, b) {
+  const r = beamRect(b), P = room.pts;
+  return [[r.x0, r.y0], [r.x1, r.y0], [r.x1, r.y1], [r.x0, r.y1], [(r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2]].every(p => insideRoom(p, P));
 }
 /* O que o forro faz na parede i, para a vista frontal */
 function ceilOnWall(room, wall) {
@@ -576,7 +618,7 @@ function sampleState() {
 
 /* migração de projetos antigos (v1: ambientes soltos) e normalização */
 function normRoom(r) {
-  r.drains = r.drains || []; r.obs = r.obs || ''; r.tw = r.tw || 120; r.wt = r.wt || []; r.wd = r.wd || []; r.marks = r.marks || []; r.photos = r.photos || []; r.ceil = r.ceil || [];
+  r.drains = r.drains || []; r.obs = r.obs || ''; r.tw = r.tw || 120; r.wt = r.wt || []; r.wd = r.wd || []; r.marks = r.marks || []; r.beams = r.beams || []; r.photos = r.photos || []; r.ceil = r.ceil || [];
   for (const it of r.items) {
     if (it.type === 'coringa' && (!it.color || it.color === '#7A5E36')) it.color = '#5A564F';
     const lt = LIBMAP[it.type];
