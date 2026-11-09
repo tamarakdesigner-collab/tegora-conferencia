@@ -173,6 +173,7 @@ function panelPlan() {
   const ops = room.items.filter(x => x.kind === 'op').sort((a, b) => (a.wall - b.wall) || (a.u - b.u));
   let h = '';
   h += `<h3>Parede</h3><div class="card">${wallChips()}<div class="row" style="margin-top:10px">${fld('Comprimento da parede ' + wnum(room, i), g.L, 'wallLen', { i }, { meas: true, badge: srcBadge(wallSrc(room, i)) })}<button class="btn sec" data-act="goWall" data-i="${i}">Ver parede →</button></div>`;
+  h += `<div class="row" style="margin-top:8px"><button class="btn dng sm" data-act="wallDel" data-i="${i}">${UI.confirm === 'wallDel' ? 'Confirmar? apaga também os itens desta parede' : 'Excluir esta parede'}</button></div>`;
   h += `<details><summary>Espessura só desta parede</summary><div class="row">${fld('Espessura da parede ' + wnum(room, i), wallT(room, i), 'wallT', { i }, { meas: true })}</div></details>`;
   h += `<details><summary>Pilar ou recuo nesta parede</summary><div class="row" data-form="notch">${sel('Tipo', 'noop', [['pilar', 'Pilar (avança)'], ['recuo', 'Recuo (entra)']], 'pilar', { f: 'type' })}${fld('Início (da esq.)', 500, 'noop', { f: 'u0' }, { meas: true })}${fld('Largura', 400, 'noop', { f: 'w' }, { meas: true })}${fld('Profundidade', 200, 'noop', { f: 'd' }, { meas: true })}<button class="btn sec sm" data-act="notch">Aplicar</button></div></details></div>`;
   h += `<h2>${eh(room.name)}</h2><p class="muted small" style="margin:0 0 10px">Planta baixa com medidas gerais, esquadrias e pé-direito. Alterar uma parede reajusta as vizinhas e os itens, mantendo as proporções.</p>`;
@@ -181,6 +182,7 @@ function panelPlan() {
     const n = room.pts.length, k = UI.selCorner;
     h += `<div class="card"><b>Canto ${k + 1}</b> · encontro das paredes ${wnum(room, (k + n - 1) % n)} e ${wnum(room, k)}<p class="muted small" style="margin:4px 0 0">Arraste o ponto na planta para reposicionar. As paredes vizinhas acompanham e continuam em esquadro.</p></div>`;
   }
+  { const dl = room.pts.map((_, k) => k).filter(k => wdel(room, k)); if (dl.length) h += `<h3>Trechos sem parede</h3><div class="card"><p class="muted small" style="margin:0 0 8px">Linha tracejada na planta: só fecha o piso, sem parede.</p><div class="row">${dl.map(k => `<button class="btn sec sm" data-act="wallRestore" data-i="${k}">Restaurar trecho ${k + 1}</button>`).join('')}</div></div>`; }
   h += `<h3>Resumo</h3><div class="card">${summaryHtml(room)}</div>`;
   h += `<h3>Esquadrias</h3>`;
   h += ops.length ? `<div class="list">${ops.map(o => `<button data-act="goItem" data-id="${o.id}" data-i="${o.wall}"><span><b>${lab.tags[o.id]}</b> ${eh(o.name)} · parede ${wnum(room, o.wall)}</span><span class="m">${fmt(o.w)} × ${fmt(o.h)}</span></button>`).join('')}</div>` : '<p class="muted small">Nenhuma esquadria. Adicione na aba Paredes.</p>';
@@ -204,7 +206,8 @@ function itemEditor(it, room) {
   let h = `<h3>${eh(it.name)} ${srcBadge(it.src)}</h3><div class="card"><div class="row">`;
   h += fld(it.type === 'coringa' ? 'Nome do ponto coringa' : 'Nome', it.name, 'itName', d, { txt: true });
   h += '</div><div class="row" style="margin-top:8px">';
-  h += fld('Largura', it.w, 'itW', d, { meas: true }) + fld('Altura', it.h, 'itH', d, { meas: true });
+  if (t && t.fixed) h += `<span class="muted small">Símbolo padrão ${t.w} × ${t.h} mm (fixo)</span>`;
+  else h += fld('Largura', it.w, 'itW', d, { meas: true }) + fld('Altura', it.h, 'itH', d, { meas: true }) + (it.type === 'bacia' ? fld('Profundidade', it.d || 700, 'itD', d, { meas: true }) : '');
   h += '</div><div class="row" style="margin-top:8px">';
   h += fld(it.kind === 'op' ? 'Dist. da esquerda' : 'Centro à esquerda', left, 'itUL', d, { meas: true }) + fld(it.kind === 'op' ? 'Dist. da direita' : 'Centro à direita', right, 'itUR', d, { meas: true });
   h += '</div><div class="row" style="margin-top:8px">';
@@ -228,6 +231,10 @@ function panelWalls() {
   h += `<div class="lib">${LIB.filter(t => t.cat === UI.libCat && !t.hidden).map(t => `<button data-act="libAdd" data-t="${t.id}"><span class="gl ${t.cat}">${t.code || t.tag}</span><span>${eh(t.name)}</span></button>`).join('')}</div>`;
   const it = room.items.find(x => x.id === UI.sel && x.wall === i);
   if (it) h += itemEditor(it, room);
+  { const mk = (room.marks || []).filter(m => m.wall === i);
+    h += `<h3>Marcação na parede</h3><div class="card"><p class="muted small" style="margin:0 0 8px">Linha livre para dividir a superfície (revestimento, pintura, acabamento). Horizontal = altura do piso; vertical = distância da esquerda da parede.</p><div class="row"><button class="btn sec sm" data-act="markAdd" data-o="h">+ Linha horizontal</button><button class="btn sec sm" data-act="markAdd" data-o="v">+ Linha vertical</button></div>`;
+    for (const m of mk) h += `<div class="row" style="margin-top:8px">${fld(m.o === 'h' ? 'Altura da linha' : 'Posição da linha', m.pos, 'markPos', { id: m.id }, { meas: true })}<button class="btn dng sm" data-act="markDel" data-id="${m.id}">Excluir</button></div>`;
+    h += `</div>`; }
   h += `<h3>Nesta parede</h3>`;
   h += items.length ? `<div class="list">${items.map(x => `<button data-act="sel" data-id="${x.id}" aria-pressed="${x.id === UI.sel}"><span><b>${x.kind === 'op' ? lab.tags[x.id] : lab.nums[x.id]}</b> ${eh(x.name)}</span><span class="m">${fmt(x.u)}${x.kind === 'op' ? '' : ' · z ' + fmt(x.z)}</span></button>`).join('')}</div>` : '<p class="muted small">Nada lançado ainda. Toque num símbolo da biblioteca para inseri-lo.</p>';
   return h;
@@ -288,10 +295,11 @@ function panelPhotos() {
   return h;
 }
 
-function pagesOf(rooms) { return rooms.reduce((n, r) => n + (hasWalls(r) ? 1 + (r.ceil.length ? 1 : 0) + r.pts.length : 0) + r.photos.length, 0); }
+function pagesOf(rooms) { return rooms.reduce((n, r) => n + (hasWalls(r) ? 1 + (r.ceil.length ? 1 : 0) + liveWalls(r) : 0) + r.photos.length, 0); }
 function panelExport() {
   const c = CL(), room = R();
   let h = `<h2>Exportar</h2><p class="muted small" style="margin:0 0 8px">Cliente: <b>${eh(c.nome || '—')}</b>. Os dados do cliente ficam na tela do cliente.</p>`;
+  if (UI.lastFile) h += `<div class="card"><div class="row"><span class="small" style="flex:1;min-width:0;overflow-wrap:anywhere">Pronto: <b>${eh(UI.lastFile.name)}</b></span><button class="btn" data-act="enviar">Enviar</button></div></div>`;
   h += `<h3>PDF cotado</h3><div class="card"><p class="small" style="margin:0 0 10px">Planta, forro, uma vista por parede (com as cotas dos pontos nas cores de cada categoria), fotos e observações, com a marca Tégora.</p><div class="row"><button class="btn" data-act="expPdf" data-v="room">Só ${eh(room.name)} (${pagesOf([room])} pág.)</button><button class="btn sec" data-act="expPdf" data-v="all">Cliente inteiro (${pagesOf(c.rooms)} pág.)</button></div></div>`;
   h += `<h3>DXF da planta (Promob)</h3><div class="card"><p class="small" style="margin:0 0 10px">Somente a <b>planta baixa</b>, um arquivo .dxf por ambiente (AutoCAD R12, em mm, CRLF) com as duas faces da parede (interna e externa, pela espessura informada), esquadrias e ralos, só com LINE, ARC e CIRCLE: sem textos, cotas, blocos, polilinhas nem hachuras. Vai dentro de um .zip.</p><div class="row"><button class="btn" data-act="expDxf" data-v="room">Só ${eh(room.name)}</button><button class="btn sec" data-act="expDxf" data-v="all">Todos os ambientes</button></div></div>`;
   h += `<h3>Trena Bluetooth (GLM 50 C)</h3><div class="card"><div id="btdiag">${btDiagHtml()}</div><div class="row" style="margin-top:10px"><button class="btn sm" data-act="conectar">${BT.state === 'on' ? 'Desconectar' : 'Conectar trena'}</button><button class="btn sec sm" data-act="conectarTodos">Listar todos os dispositivos</button><button class="btn sec sm" data-act="conectarSerial">Bluetooth clássico (PC)</button><button class="btn sec sm" data-act="conectarSerialTodas">Clássico: listar todas as portas</button></div><div class="row" style="margin-top:8px"><button class="btn sec sm" data-act="btSync">Reenviar sincronização</button><button class="btn sec sm" data-act="btStart">Disparar medição</button><button class="btn sec sm" data-act="btLaser">Disparar laser</button><button class="btn sec sm" data-act="btCopy">Copiar registro</button></div><p class="muted small" style="margin:8px 0 0">Ligue o Bluetooth da trena (tecla de Bluetooth). Com ela conectada, toque em “Medir” ao lado do campo e meça: o valor entra no campo.</p></div>`;
@@ -529,6 +537,7 @@ function setSheet(st) { UI.sheet = st; applySheet(); }
 function openSheet() { if ((UI.sheet || 'min') === 'min') setSheet('peek'); }
 
 function renderAll() {
+  { const r = (S.cc != null && CL() && R()) ? R() : null; if (r && r.pts.length && wdel(r, S.wall)) S.wall = wallOrder(r)[0] || 0; }
   renderHead();
   if (S.cc == null || UI.view !== 'work') renderHome(); else { renderPanel(); renderStage(); applySheet(); }
 }
@@ -562,6 +571,7 @@ function renderHome() {
     h += `<h3>Ambientes a medir</h3>`;
     h += c.rooms.length ? `<div class="list">${c.rooms.map((r, i) => `<button data-act="roomOpen" data-i="${i}" style="flex-direction:column;gap:2px"><b style="font-size:15px">${eh(r.name)}</b><span class="m">${roomStat(r)}</span></button>`).join('')}</div>` : '<p class="muted small">Nenhum ambiente ainda. Crie abaixo.</p>';
     h += `<div class="card" data-form="rooms" style="margin-top:10px"><h3 style="margin-top:0">Criar ambientes</h3><label class="fld"><span>Nomes (separe por vírgula ou linha)</span><textarea class="txt" rows="2" data-f="names" data-act="noop" id="roomNames" placeholder="Sala, Cozinha, Banheiro, Dormitório"></textarea></label><div class="cats" style="margin-top:8px">${ROOM_SUGG.map(n => `<button class="chip" data-act="roomSugg" data-n="${eh(n)}">${eh(n)}</button>`).join('')}</div><div class="row" style="margin-top:8px"><button class="btn" data-act="roomsCreate">Criar ambientes</button></div><p class="muted small" style="margin:8px 0 0">Cada ambiente nasce vazio (pé-direito 2.700 mm): na hora da medição você desenha o contorno com o dedo e informa as medidas.</p></div>`;
+    if (UI.lastFile) h += `<div class="card"><div class="row"><span class="small" style="flex:1;min-width:0;overflow-wrap:anywhere">Pronto: <b>${eh(UI.lastFile.name)}</b></span><button class="btn" data-act="enviar">Enviar</button></div></div>`;
     h += `<h3>Exportar</h3><div class="card"><div class="row"><button class="btn" data-act="expPdf" data-v="all">PDF do cliente (${pagesOf(c.rooms)} pág.)</button><button class="btn sec" data-act="expDxf" data-v="all">DXF (um por ambiente)</button></div></div>`;
     h += `<div class="row" style="margin-top:14px"><button class="btn dng sm" data-act="clientDel">${UI.confirm === 'clientDel' ? 'Confirmar: excluir cliente e ambientes?' : 'Excluir cliente'}</button></div>`;
   }
@@ -631,7 +641,7 @@ const A = {
     const res = traceToPoly(pts);
     UI.strokes = []; UI.stroke = null;
     if (!res.ok) { toast(res.msg); renderAll(); return; }
-    tryMut(() => { const r = R(); r.pts = res.pts; r.wn = res.wn; r.wsrc = res.pts.map(() => null); r.wt = []; UI.uv = null; UI.selCorner = null; S.wall = wallOrder(r)[0]; });
+    tryMut(() => { const r = R(); r.pts = res.pts; r.wn = res.wn; r.wsrc = res.pts.map(() => null); r.wt = []; r.wd = res.wd || []; r.marks = []; UI.uv = null; UI.selCorner = null; S.wall = wallOrder(r)[0]; });
     setSheet('peek');
     toast('Contorno ajustado. Agora informe a medida real de cada parede.');
   },
@@ -677,6 +687,15 @@ const A = {
     if (UI.confirm !== 'roomDel') { UI.confirm = 'roomDel'; renderPanel(); return; }
     UI.confirm = null; tryMut(() => { CL().rooms.splice(S.cur, 1); S.cur = 0; S.wall = 0; UI.uv = null; UI.view = 'client'; });
   },
+  wallDel(el) {
+    if (UI.confirm !== 'wallDel') { UI.confirm = 'wallDel'; renderPanel(); return; }
+    UI.confirm = null; const i = +el.dataset.i;
+    tryMut(() => { const r = R(); const res = deleteWall(r, i); if (!res.ok) { toast(res.msg); return; } UI.sel = null; UI.uv = null; S.wall = wallOrder(r)[0] || 0; });
+  },
+  wallRestore(el) { tryMut(() => { restoreWall(R(), +el.dataset.i); UI.uv = null; }); },
+  markAdd(el) { tryMut(() => { const r = R(); r.marks = r.marks || []; const g = wallGeom(r, S.wall), o = el.dataset.o; r.marks.push({ id: 'mk' + Date.now().toString(36), wall: S.wall, o, pos: o === 'h' ? rnd(r.H / 2, 10) : rnd(g.L / 2, 10) }); }); },
+  markDel(el) { tryMut(() => { const r = R(); r.marks = (r.marks || []).filter(m => m.id !== el.dataset.id); }); },
+  markPos(el) { const v = num(el, 0); if (v == null) return; tryMut(() => { const m = (R().marks || []).find(x => x.id === el.dataset.id); if (m) m.pos = v; }); },
   wall(el) { S.wall = +el.dataset.i; UI.sel = null; UI.uv = null; persist(); renderAll(); },
   wallLen(el) { const v = num(el, 50); if (v == null) return; const src = el.dataset.src || 'manual'; tryMut(() => setWallLen(R(), +el.dataset.i, v, src)); },
   goWall(el) { S.wall = +el.dataset.i; UI.tab = 'walls'; UI.uv = null; renderAll(); },
@@ -702,6 +721,18 @@ const A = {
   itUR(el) { const v = num(el, 0); if (v == null) return; const it = itemId(el), src = el.dataset.src || 'manual'; tryMut(() => { const L = wallLen(R(), it.wall); const u = it.kind === 'op' ? L - v - it.w : L - v; it.u = it.kind === 'op' ? clamp(u, 0, Math.max(0, L - it.w)) : clamp(u, 0, L); it.src = src; if (overlapOps(R(), it)) return { ok: false, msg: 'A esquadria encostaria em outra.' }; }); },
   itZ(el) { const v = num(el, 0); if (v == null) return; const it = itemId(el), src = el.dataset.src || 'manual'; tryMut(() => { it.z = Math.min(v, R().H); it.src = src; }); },
   itTop(el) { const v = num(el, 0); if (v == null) return; const it = itemId(el); tryMut(() => { it.z = Math.max(0, R().H - v - it.h); }); },
+  enviar() {
+    const f = UI.lastFile; if (!f) return;
+    const N = NAT();
+    if (N && f.uri && N.share) { N.share(f.uri, f.name); return; }
+    try {
+      const mime = /\.pdf$/i.test(f.name) ? 'application/pdf' : /\.zip$/i.test(f.name) ? 'application/zip' : 'application/octet-stream';
+      const file = new File([f.data], f.name, { type: mime });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: f.name }).catch(() => { });
+      else toast('Envio direto indisponível aqui. Abra o arquivo salvo e compartilhe por lá.');
+    } catch (e) { toast('Não foi possível enviar (' + (e.message || e) + ').'); }
+  },
+  itD(el) { const v = num(el, 50); if (v == null) return; const it = itemId(el); tryMut(() => { it.d = v; }); },
   itHinge(el) { const it = itemId(el); tryMut(() => { it.hinge = el.value; }); },
   itSwing(el) { const it = itemId(el); tryMut(() => { it.swing = el.value; }); },
   itShape(el) { const it = itemId(el); tryMut(() => { it.shape = el.value; }); },
@@ -859,13 +890,14 @@ async function saveFile(name, data) {
     try {
       const u8 = typeof data === 'string' ? new TextEncoder().encode(data) : data instanceof Uint8Array ? data : new Uint8Array(data);
       let bin = ''; for (let i = 0; i < u8.length; i += 8192) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
-      N.save(name, btoa(bin)); return;
+      const uri = N.save(name, btoa(bin)); UI.lastFile = { name, uri: uri ? String(uri) : '' }; renderAll(); return;
     } catch (e) { toast('Não foi possível salvar o arquivo (' + (e.message || e) + ').'); return; }
   }
   const d = await getDl();
   try {
-    if (d) { await d.save({ filename: name, data }); toast('Arquivo pronto: ' + name); return; }
+    if (d) { await d.save({ filename: name, data }); UI.lastFile = { name, data }; renderAll(); toast('Arquivo pronto: ' + name); return; }
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data])); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    UI.lastFile = { name, data }; renderAll();
     toast('Arquivo gerado: ' + name);
   } catch (e) {
     if (e && e.code === 'declined') return;

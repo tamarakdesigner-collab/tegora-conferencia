@@ -2,8 +2,8 @@
 'use strict';
 
 const PAL_PRINT = {
-  paper: '#FFFFFF', floor: '#FFFFFF', wall: '#2A2826', ink: '#2A2826', dim: '#7A5E36', mut: '#6A645B', faint: '#CBC4B8',
-  accent: '#9C7A48', sel: '#9C7A48', ele: '#A3631A', hid: '#2B6A8C', ar: '#3F7A55', cor: '#7A5E36',
+  paper: '#FFFFFF', floor: '#FFFFFF', wall: '#2A2826', ink: '#2A2826', dim: '#6B4423', mut: '#6A645B', faint: '#CBC4B8',
+  accent: '#9C7A48', sel: '#9C7A48', ele: '#6B4423', hid: '#2B6A8C', ar: '#3F7A55', cor: '#5A564F',
   gesso: '#EFEBE4', gessoLn: '#9C8F7C', neg: '#2A2826', roda: '#CBC4B8', door: '#F6F3EE', glass: '#DCE6EA', ok: '#2A2826', surf: '#F4F1EC',
 };
 const PAL_SCREEN = {};
@@ -93,11 +93,12 @@ function chainSegs(room, wi) {
 
 function drawWallsBase(c, room, o) {
   const { G, v, K, P } = c;
-  const twArr = room.pts.map((_, i) => Math.max(5 * K / v.s, wallT(room, i)));
+  const twArr = room.pts.map((_, i) => wdel(room, i) ? 0 : Math.max(5 * K / v.s, wallT(room, i)));
   const tw = Math.max(...twArr), twPx = tw * v.s;
   LY(c, 'TG_PAREDES');
   G.poly(polyDev(c, offsetPolyVar(room.pts, twArr.map(x => -x))), { fill: P.wall });
   G.poly(polyDev(c, room.pts), { fill: P.floor });
+  room.pts.forEach((p, i) => { if (wdel(room, i)) { const q = room.pts[(i + 1) % room.pts.length]; G.line(...dev(c, p), ...dev(c, q), { stroke: P.mut, w: 0.8 * K, dash: [5 * K, 4 * K] }); } });
   return { tw, twPx, twArr };
 }
 
@@ -150,7 +151,7 @@ function planOpening(c, it, g, tw, tag) {
   if (tag) {
     const mid = (u0 + u1) / 2, off = 12 * K / v.s;
     const q = dev(c, [g.A[0] + g.d[0] * mid + g.nin[0] * off, g.A[1] + g.d[1] * mid + g.nin[1] * off]);
-    G.text(q[0], q[1], tag, { size: 8 * K, bold: true, fill: P.accent });
+    G.text(q[0], q[1], tag, { size: 8 * K, bold: true, fill: P.ink });
   }
 }
 
@@ -182,12 +183,22 @@ function drawPlan(c, room, o) {
   const n = room.pts.length;
   const lab = labelsFor(room);
   for (const it of room.items) if (it.kind === 'op') planOpening(c, it, wallGeom(room, it.wall), twArr[it.wall], o.mini ? null : lab.tags[it.id]);
+  for (const it of room.items) if (it.type === 'bacia' && !wdel(room, it.wall)) {
+    const g = wallGeom(room, it.wall), D = it.d || 700, W = it.w, col = P.hid;
+    const Q = (u, b) => dev(c, [g.A[0] + g.d[0] * (it.u + u) + g.nin[0] * b, g.A[1] + g.d[1] * (it.u + u) + g.nin[1] * b]);
+    LY(c, 'TG_HIDRAULICA');
+    const tD = Math.min(D * 0.3, 220);
+    G.poly([Q(-W / 2, 0), Q(W / 2, 0), Q(W / 2, tD), Q(-W / 2, tD)], { fill: P.paper, stroke: col, w: 1.3 * K });
+    const bw = W * 0.78, cxp = [], ry = (D - tD) / 2;
+    for (let k = 0; k <= 28; k++) { const a = Math.PI * 2 * k / 28; cxp.push(Q(Math.cos(a) * bw / 2, tD + ry + Math.sin(a) * ry)); }
+    G.poly(cxp, { fill: P.paper, stroke: col, w: 1.3 * K });
+  }
   drawDrains(c, room, o);
   if (o.corners && c.hit && !o.mini) {
     LY(c, 'TG_ROTULOS');
     room.pts.forEach((p, k) => {
       const [x, y] = dev(c, p), sel = o.selCorner === k;
-      G.circle(x, y, (sel ? 8 : 6) * K, { fill: sel ? P.sel : P.paper, stroke: sel ? P.sel : P.accent, w: 1.6 * K });
+      G.circle(x, y, (sel ? 8 : 6) * K, { fill: sel ? P.sel : P.paper, stroke: sel ? P.sel : P.ink, w: 1.6 * K });
       G.circle(x, y, 17, { fill: 'rgba(0,0,0,0.001)', stroke: 'none', pe: 'all', id: 'c:' + k });
     });
   }
@@ -196,6 +207,7 @@ function drawPlan(c, room, o) {
     G.line(...dev(c, g.A), ...dev(c, g.B), { stroke: P.sel, w: 3 * K });
   }
   for (let i = 0; i < n; i++) {
+    if (wdel(room, i)) continue;
     const g = wallGeom(room, i);
     if (c.hit) G.hitLine(...dev(c, g.A), ...dev(c, g.B), 'w:' + i, 18);
     if (o.mini) continue;
@@ -305,15 +317,24 @@ function drawCeil(c, room, o) {
     }
     if (el.kind === 'rect') {
       const b = bbox(room.pts);
-      dimLine(c, [bb.x0, bb.y0], [bb.x1, bb.y0], [0, -1], 0, fmt(bb.w), { color: P.accent });
-      dimLine(c, [bb.x1, bb.y0], [bb.x1, bb.y1], [1, 0], 0, fmt(bb.h), { color: P.accent });
-      if (bb.x0 - b.x0 > 1) dimLine(c, [b.x0, bb.y1 - 0], [bb.x0, bb.y1], [0, 1], 10, fmt(bb.x0 - b.x0), { color: P.accent, size: 7.5 });
-      if (bb.y0 - b.y0 > 1) dimLine(c, [bb.x0, b.y0], [bb.x0, bb.y0], [-1, 0], 10, fmt(bb.y0 - b.y0), { color: P.accent, size: 7.5 });
+      dimLine(c, [bb.x0, bb.y0], [bb.x1, bb.y0], [0, -1], 0, fmt(bb.w), { color: P.dim });
+      dimLine(c, [bb.x1, bb.y0], [bb.x1, bb.y1], [1, 0], 0, fmt(bb.h), { color: P.dim });
+      if (bb.x0 - b.x0 > 1) dimLine(c, [b.x0, bb.y1 - 0], [bb.x0, bb.y1], [0, 1], 10, fmt(bb.x0 - b.x0), { color: P.dim, size: 7.5 });
+      if (bb.y0 - b.y0 > 1) dimLine(c, [bb.x0, b.y0], [bb.x0, bb.y0], [-1, 0], 10, fmt(bb.y0 - b.y0), { color: P.dim, size: 7.5 });
     }
   }
 }
 
 /* ---------- parede em vista frontal ---------- */
+/* bacia sanitária em vista frontal: caixa acoplada em cima, bacia embaixo */
+function bacia(c, cx, cy, w, h, col) {
+  const { G, K, P } = c;
+  const x0 = cx - w / 2, y0 = cy - h / 2, st = { fill: P.paper, stroke: col, w: 1.4 * K };
+  const th = h * 0.46, bw = w * 0.78, bx = cx - bw / 2, by = y0 + th + 1.5 * K, bh = h - th - 1.5 * K;
+  G.rect(x0, y0, w, th, st);
+  G.poly([[bx, by], [bx + bw, by], [bx + bw, by + bh * 0.55], [cx + bw * 0.34, by + bh], [cx - bw * 0.34, by + bh], [bx, by + bh * 0.55]], st);
+  G.line(bx, by, bx + bw, by, { stroke: col, w: 1 * K });
+}
 function glyph(c, it, cx, cy, o) {
   const { G, v, K, P } = c;
   const t = LIBMAP[it.type], cat = t.cat;
@@ -323,18 +344,18 @@ function glyph(c, it, cx, cy, o) {
   const small = it.w <= 150 && it.h <= 150;
   const st = { fill: P.paper, stroke: col, w: 1.5 * K };
   const code = it.type === 'coringa' ? (it.name || '?').trim().slice(0, 2).toUpperCase() : t.code;
+  if (it.type === 'bacia') { LY(c, CATLAYER.hid); wpx = it.w * v.s; hpx = it.h * v.s; bacia(c, cx, cy, wpx, hpx, col); return { wpx, hpx }; }
   if (G.sym) {
-    const circ = (cat === 'ele' && small) || (cat === 'cor' && it.shape === 'circle'), sq = cat === 'hid' && small;
-    if (circ || sq) wpx = hpx = Math.max(wpx, hpx);
+    const circ = (cat === 'hid' && small) || (cat === 'cor' && it.shape === 'circle');
+    if (circ) wpx = hpx = Math.max(wpx, hpx);
     LY(c, CATLAYER[cat]);
     G.sym(circ ? 'TG_CIRC' : cat === 'cor' ? 'TG_CORINGA' : 'TG_RET', cx, cy, wpx, hpx);
     G.text(cx, cy, code, { size: 7.4 * K, bold: true, fill: col });
     return { wpx, hpx };
   }
-  if (cat === 'ele' && small) { const r = Math.max(wpx, hpx) / 2; G.circle(cx, cy, r, st); wpx = hpx = 2 * r; }
   else if (cat === 'cor' && it.shape === 'circle') { const r = Math.max(wpx, hpx) / 2; G.circle(cx, cy, r, Object.assign({}, st, { dash: [3 * K, 2 * K] })); wpx = hpx = 2 * r; }
   else if (cat === 'cor') G.rect(cx - wpx / 2, cy - hpx / 2, wpx, hpx, Object.assign({}, st, { dash: [3 * K, 2 * K] }));
-  else if (cat === 'hid' && small) { const r = Math.max(wpx, hpx); wpx = hpx = r; G.rect(cx - r / 2, cy - r / 2, r, r, st); }
+  if (cat === 'hid' && small) { const r = Math.max(wpx, hpx) / 2; G.circle(cx, cy, r, st); wpx = hpx = 2 * r; }
   else G.rect(cx - wpx / 2, cy - hpx / 2, wpx, hpx, Object.assign({}, st, { r: cat === 'ar' ? 3 * K : 0 }));
   if (cat === 'ar' && it.type === 'evap' && wpx > 40 * K) {
     G.line(cx - wpx / 2 + 4 * K, cy + hpx / 2 - 4 * K, cx + wpx / 2 - 4 * K, cy + hpx / 2 - 4 * K, { stroke: col, w: 0.8 * K });
@@ -371,15 +392,16 @@ function drawOpeningFront(c, it, tag, sel) {
     G.line(x0 + w * 0.2, yt + h * 0.5, x0 + w * 0.36, yt + h * 0.5, { stroke: P.ink, w: 1 * K });
   } else {
     G.rect(x0, yt, w, h, Object.assign({ fill: P.door }, st));
-    const dash = (it.swing || 'in') === 'out' ? [4 * K, 2.5 * K] : null;
+    const dash = [4 * K, 2.5 * K];
     const two = t === 'porta-giro2';
     const tri = (xa, xb) => { G.line(xa, (yt + yb) / 2, xb, yt, { stroke: P.ink, w: 0.8 * K, dash }); G.line(xa, (yt + yb) / 2, xb, yb, { stroke: P.ink, w: 0.8 * K, dash }); };
-    if (two) { G.line(x0 + w / 2, yt, x0 + w / 2, yb, { stroke: P.ink, w: 0.9 * K }); tri(x0, x0 + w / 2); tri(x1, x0 + w / 2); }
-    else if ((it.hinge || 'L') === 'L') tri(x0, x1); else tri(x1, x0);
+    /* vértice do triângulo no lado oposto à dobradiça, em linha tracejada */
+    if (two) { G.line(x0 + w / 2, yt, x0 + w / 2, yb, { stroke: P.ink, w: 0.9 * K }); tri(x0 + w / 2, x0); tri(x0 + w / 2, x1); }
+    else if ((it.hinge || 'L') === 'L') tri(x1, x0); else tri(x0, x1);
     const hx = two ? [x0, x1] : [(it.hinge || 'L') === 'L' ? x0 : x1];
     for (const x of hx) for (const f of [0.2, 0.8]) G.rect(x - 1.2 * K, yt + h * f - 2 * K, 2.4 * K, 4 * K, { fill: P.ink });
   }
-  if (tag) G.text((x0 + x1) / 2, yt + 9 * K, tag, { size: 8.5 * K, bold: true, fill: P.accent });
+  if (tag) G.text((x0 + x1) / 2, yt + 9 * K, tag, { size: 8.5 * K, bold: true, fill: P.ink });
   if (c.hit) G.hitRect(x0 - 2, yt - 2, w + 4, h + 4, 'i:' + it.id);
 }
 
@@ -417,20 +439,22 @@ function hChain(c, xs, yw, nsign, offK, colors, o) {
 function ptDimsAll(c, pts, L) {
   const { G, v, K, P } = c;
   const fs = 7.2 * K;
-  const colOf = it => { const cat = LIBMAP[it.type].cat; return cat === 'cor' ? (it.color || P.cor) : P[cat]; };
-  const info = pts.map(it => ({ it, cz: zc(it), cy: v.Y(zc(it)), half: Math.max(it.h * v.s, 15 * K) / 2, col: colOf(it) }));
+  /* cotas: elétrica em nogueira, hidráulica em azul; coringa mede pelas bordas, não pelo eixo */
+  const colOf = it => { const cat = LIBMAP[it.type].cat; return cat === 'cor' ? P.dim : P[cat]; };
+  const refsOf = it => it.type === 'coringa' ? [it.u - it.w / 2, it.u + it.w / 2] : [it.u];
+  const info = pts.map(it => ({ it, cat: LIBMAP[it.type].cat, refs: refsOf(it), cz: it.type === 'coringa' ? it.z - it.h / 2 : zc(it), cy: v.Y(zc(it)), half: Math.max(it.h * v.s, 15 * K) / 2, col: colOf(it) }));
   const bands = info.map(i => [i.cy - i.half - 14 * K, i.cy + i.half + 4 * K]);
   const groups = [];
   for (const i of info.slice().sort((a, b) => b.cz - a.cz)) {
-    const g = groups.find(q => Math.abs(q.cz - i.cz) <= 5);
-    if (g) g.items.push(i); else groups.push({ cz: i.cz, cy: i.cy, items: [i] });
+    const g = groups.find(q => q.cat === i.cat && Math.abs(q.cz - i.cz) <= 5);
+    if (g) g.items.push(i); else groups.push({ cat: i.cat, cz: i.cz, cy: v.Y(i.cz), items: [i] });
   }
   const used = [];
   for (const g of groups) {
-    g.items.sort((a, b) => a.it.u - b.it.u);
     const half = Math.max(...g.items.map(i => i.half));
+    const rl = []; g.items.forEach(i => i.refs.forEach(r => rl.push([r, i.col]))); rl.sort((a, b) => a[0] - b[0]);
     const xs = [0], cols = [];
-    for (const i of g.items) { if (i.it.u - xs[xs.length - 1] > 1) { xs.push(i.it.u); cols.push(i.col); } else if (xs.length === 1) { cols.push(i.col); xs.push(i.it.u + 0.0001); } }
+    for (const [r, col] of rl) { if (r - xs[xs.length - 1] > 1) { xs.push(r); cols.push(col); } else if (xs.length === 1) { cols.push(col); xs.push(r + 0.0001); } }
     if (L - xs[xs.length - 1] > 1) { xs.push(L); cols.push(g.items[g.items.length - 1].col); }
     /* altura (em degraus) que os textos vão ocupar */
     const tmp = hChainLevels(c, xs, fs);
@@ -455,7 +479,8 @@ function ptDimsAll(c, pts, L) {
     side = prevClose ? -side : (nextClose ? -1 : 1);
     g.sort((a, b) => a.it.z - b.it.z).forEach((i, k) => {
       const ac = { color: i.col, tcolor: i.col, size: 7.2, tpos: 0.2 };
-      dimLine(c, [i.it.u, 0], [i.it.u, i.it.z], [side, 0], k * 12, fmt(i.it.z), ac);
+      const zt = i.it.type === 'coringa' ? i.it.z - i.it.h / 2 : i.it.z;
+      dimLine(c, [i.it.u, 0], [i.it.u, zt], [side, 0], k * 12, fmt(zt), ac);
     });
   }
 }
@@ -479,6 +504,21 @@ function drawWall(c, room, wi, o) {
   const X0 = v.X(0), X1 = v.X(L), YT = v.Y(H), YB = v.Y(0);
   const lab = labelsFor(room);
   G.rect(X0, YT, X1 - X0, YB - YT, { fill: P.floor, stroke: 'none' });
+  /* marcações livres (divisão de revestimento etc.) */
+  LY(c, 'TG_MARCACOES');
+  for (const m of (room.marks || [])) {
+    if (m.wall !== wi) continue;
+    const st = { stroke: P.ink, w: 1 * K, dash: [8 * K, 3 * K, 2 * K, 3 * K] };
+    if (m.o === 'v') {
+      const x = v.X(m.pos); G.line(x, YT, x, YB, st);
+      if (c.hit) G.hitLine(x, YT, x, YB, 'mk:' + m.id, 16);
+      G.text(x + 3 * K, YT + 9 * K, fmt(m.pos), { size: 7 * K, font: 'mono', fill: P.dim });
+    } else {
+      const y = v.Y(m.pos); G.line(X0, y, X1, y, st);
+      if (c.hit) G.hitLine(X0, y, X1, y, 'mk:' + m.id, 16);
+      G.text(X0 + 3 * K, y - 5 * K, fmt(m.pos), { size: 7 * K, font: 'mono', fill: P.dim });
+    }
+  }
   /* chão */
   G.line(X0 - 14 * K, YB, X1 + 14 * K, YB, { stroke: P.ink, w: 2 * K });
   for (let x = X0 - 10 * K; x < X1 + 12 * K; x += 7 * K) G.line(x, YB + 0.5 * K, x - 4.5 * K, YB + 5 * K, { stroke: P.faint, w: 0.7 * K });
@@ -523,9 +563,10 @@ function drawWall(c, room, wi, o) {
     const b = itemBox(it);
     const cx = v.X(it.u), cy = v.Y(zc(it));
     const sel = o.sel === it.id;
-    const gl = glyph(c, it, cx, cy, o);
+    const isCor = it.type === 'coringa';
+    const gl = glyph(c, isCor && sel ? Object.assign({}, it, { color: P.sel }) : it, cx, cy, o);
     LY(c, 'TG_TEXTO');
-    if (sel) G.rect(cx - gl.wpx / 2 - 3 * K, cy - gl.hpx / 2 - 3 * K, gl.wpx + 6 * K, gl.hpx + 6 * K, { stroke: P.sel, w: 1.6 * K, dash: [3 * K, 2 * K] });
+    if (sel && !isCor) G.rect(cx - gl.wpx / 2 - 3 * K, cy - gl.hpx / 2 - 3 * K, gl.wpx + 6 * K, gl.hpx + 6 * K, { stroke: P.sel, w: 1.6 * K, dash: [3 * K, 2 * K] });
     G.text(cx, cy - gl.hpx / 2 - 6.5 * K, String(lab.nums[it.id]), { size: 7.6 * K, bold: true, fill: P.ink });
     if (!o.ptDims) G.text(cx, cy + gl.hpx / 2 + 6.5 * K, fmt(it.z), { size: 6.6 * K, font: 'mono', fill: P.mut });
     if (c.hit) G.hitRect(cx - Math.max(gl.wpx / 2, 11), cy - Math.max(gl.hpx / 2, 11), Math.max(gl.wpx, 22), Math.max(gl.hpx, 22), 'i:' + it.id);
@@ -538,8 +579,8 @@ function drawWall(c, room, wi, o) {
     for (const s of ch.segs) dimLine(c, [s.a, H], [s.b, H], up, off, fmt(s.b - s.a), { src: s.src });
     off += 15;
   }
-  if (pts.length && pts.length <= 10) {
-    const xs = [0, ...pts.map(p => p.u), L].sort((a, b) => a - b);
+  if (pts.length && pts.length <= 10 && !o.ptDims) {
+    const xs = [0, ...pts.flatMap(p => p.type === 'coringa' ? [p.u - p.w / 2, p.u + p.w / 2] : [p.u]), L].sort((a, b) => a - b);
     const lv = hChain(c, xs, H, 1, off, [P.mut], { size: 7.6 });
     off += 15 + lv * 8.5;
   }

@@ -2,19 +2,19 @@
   --bg:#E9E5DE;--surface:#F4F1EC;--surface2:#EDE9E1;--fg:#262422;--muted:#6A645B;--line:#CBC4B8;--accent:#7A5E36;--accent-fg:#FFFFFF;
   --btn:#2A2826;--btn-fg:#F4F1EC;--danger:#9A3B2E;--ok:#3F7A55;
   --f-sans:'Hanken Grotesk',system-ui,-apple-system,'Segoe UI',sans-serif;--f-serif:'Cormorant Garamond',Georgia,'Times New Roman',serif;--f-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
-  --p-paper:#FBFAF7;--p-floor:#FBFAF7;--p-wall:#2A2826;--p-ink:#2A2826;--p-dim:#7A5E36;--p-mut:#6A645B;--p-faint:#CBC4B8;--p-accent:#9C7A48;--p-sel:#9C7A48;
-  --p-ele:#A3631A;--p-hid:#2B6A8C;--p-ar:#3F7A55;--p-cor:#7A5E36;--p-gesso:#EFEBE4;--p-gessoLn:#9C8F7C;--p-neg:#2A2826;--p-roda:#CBC4B8;--p-door:#F6F3EE;--p-glass:#DCE6EA;--p-ok:#2A2826;--p-surf:#F0ECE5;
+  --p-paper:#FBFAF7;--p-floor:#FBFAF7;--p-wall:#2A2826;--p-ink:#2A2826;--p-dim:#6B4423;--p-mut:#6A645B;--p-faint:#CBC4B8;--p-accent:#9C7A48;--p-sel:#9C7A48;
+  --p-ele:#6B4423;--p-hid:#2B6A8C;--p-ar:#3F7A55;--p-cor:#5A564F;--p-gesso:#EFEBE4;--p-gessoLn:#9C8F7C;--p-neg:#2A2826;--p-roda:#CBC4B8;--p-door:#F6F3EE;--p-glass:#DCE6EA;--p-ok:#2A2826;--p-surf:#F0ECE5;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#1A1918;--surface:#232120;--surface2:#2B2927;--fg:#ECE7DE;--muted:#A39B8F;--line:#3B3833;--accent:#C29A5F;--accent-fg:#1A1918;
   --btn:#ECE7DE;--btn-fg:#1A1918;--danger:#E07A68;--ok:#6DB88A;color-scheme:dark;
-  --p-paper:#1F1D1B;--p-floor:#1F1D1B;--p-wall:#D8D2C6;--p-ink:#E6E0D5;--p-dim:#C29A5F;--p-mut:#A39B8F;--p-faint:#4A453E;--p-accent:#C29A5F;--p-sel:#E0B66E;
-  --p-ele:#E39A45;--p-hid:#5AA6CF;--p-ar:#6DB88A;--p-cor:#C29A5F;--p-gesso:#2D2A27;--p-gessoLn:#6E665A;--p-neg:#E6E0D5;--p-roda:#5A5248;--p-door:#262321;--p-glass:#26363D;--p-ok:#E6E0D5;--p-surf:#262321;}}
+  --p-paper:#1F1D1B;--p-floor:#1F1D1B;--p-wall:#D8D2C6;--p-ink:#E6E0D5;--p-dim:#C08F62;--p-mut:#A39B8F;--p-faint:#4A453E;--p-accent:#C29A5F;--p-sel:#E0B66E;
+  --p-ele:#C08F62;--p-hid:#5AA6CF;--p-ar:#6DB88A;--p-cor:#B5AEA2;--p-gesso:#2D2A27;--p-gessoLn:#6E665A;--p-neg:#E6E0D5;--p-roda:#5A5248;--p-door:#262321;--p-glass:#26363D;--p-ok:#E6E0D5;--p-surf:#262321;}}
 :root[data-theme="dark"]{
   --bg:#1A1918;--surface:#232120;--surface2:#2B2927;--fg:#ECE7DE;--muted:#A39B8F;--line:#3B3833;--accent:#C29A5F;--accent-fg:#1A1918;
   --btn:#ECE7DE;--btn-fg:#1A1918;--danger:#E07A68;--ok:#6DB88A;color-scheme:dark;
-  --p-paper:#1F1D1B;--p-floor:#1F1D1B;--p-wall:#D8D2C6;--p-ink:#E6E0D5;--p-dim:#C29A5F;--p-mut:#A39B8F;--p-faint:#4A453E;--p-accent:#C29A5F;--p-sel:#E0B66E;
-  --p-ele:#E39A45;--p-hid:#5AA6CF;--p-ar:#6DB88A;--p-cor:#C29A5F;--p-gesso:#2D2A27;--p-gessoLn:#6E665A;--p-neg:#E6E0D5;--p-roda:#5A5248;--p-door:#262321;--p-glass:#26363D;--p-ok:#E6E0D5;--p-surf:#262321;}
+  --p-paper:#1F1D1B;--p-floor:#1F1D1B;--p-wall:#D8D2C6;--p-ink:#E6E0D5;--p-dim:#C08F62;--p-mut:#A39B8F;--p-faint:#4A453E;--p-accent:#C29A5F;--p-sel:#E0B66E;
+  --p-ele:#C08F62;--p-hid:#5AA6CF;--p-ar:#6DB88A;--p-cor:#B5AEA2;--p-gesso:#2D2A27;--p-gessoLn:#6E665A;--p-neg:#E6E0D5;--p-roda:#5A5248;--p-door:#262321;--p-glass:#26363D;--p-ok:#E6E0D5;--p-surf:#262321;}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{margin:0}
@@ -79,7 +79,7 @@ h3{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
 .lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px}
 .lib button{display:flex;align-items:center;gap:7px;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 8px;font-size:12px;line-height:1.2}
 .lib .gl{flex:0 0 26px;height:26px;display:grid;place-items:center;border:1.5px solid currentColor;font-family:var(--f-mono);font-weight:600;font-size:9px}
-.lib .gl.ele{border-radius:50%;color:var(--p-ele)}.lib .gl.hid{color:var(--p-hid)}.lib .gl.ar{color:var(--p-ar);border-radius:3px}.lib .gl.cor{color:var(--p-cor);border-style:dashed}.lib .gl.esq{color:var(--fg);border-width:1px}
+.lib .gl.ele{border-radius:3px;color:var(--p-ele)}.lib .gl.hid{border-radius:50%;color:var(--p-hid)}.lib .gl.ar{color:var(--p-ar);border-radius:3px}.lib .gl.cor{color:var(--p-cor);border-style:dashed}.lib .gl.esq{color:var(--fg);border-width:1px}
 .list{display:flex;flex-direction:column;gap:4px}
 .list button{display:flex;justify-content:space-between;gap:8px;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;font-size:13px}
 .list button[aria-pressed=true]{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}

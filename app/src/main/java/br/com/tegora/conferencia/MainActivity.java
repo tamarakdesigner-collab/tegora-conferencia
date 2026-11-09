@@ -267,7 +267,7 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void save(String name, String b64) {
+        public String save(String name, String b64) {
             try {
                 byte[] data = Base64.decode(b64, Base64.DEFAULT);
                 String low = name.toLowerCase();
@@ -286,9 +286,33 @@ public class MainActivity extends Activity {
                 o.write(data);
                 o.close();
                 toast("Salvo em Downloads/Tegora: " + name);
+                return u.toString();
             } catch (Exception e) {
                 toast("Não foi possível salvar: " + e.getMessage());
+                return "";
             }
+        }
+
+        @JavascriptInterface
+        public void share(final String uri, final String name) {
+            runOnUiThread(new Runnable() {
+                public void run() {
+                    try {
+                        String low = name.toLowerCase();
+                        String mime = low.endsWith(".pdf") ? "application/pdf"
+                                : low.endsWith(".zip") ? "application/zip"
+                                : low.endsWith(".json") ? "application/json" : "application/octet-stream";
+                        Intent i = new Intent(Intent.ACTION_SEND);
+                        i.setType(mime);
+                        i.putExtra(Intent.EXTRA_STREAM, Uri.parse(uri));
+                        i.putExtra(Intent.EXTRA_SUBJECT, name);
+                        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(Intent.createChooser(i, "Enviar " + name));
+                    } catch (Exception e) {
+                        toast("Não foi possível abrir o envio: " + e.getMessage());
+                    }
+                }
+            });
         }
     }
 

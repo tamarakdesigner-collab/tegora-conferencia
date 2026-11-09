@@ -142,16 +142,17 @@ const LIB = [
   { id: 'janela-correr', cat: 'esq', kind: 'op', name: 'Janela de correr', tag: 'J', w: 1500, h: 1000, z: 1100, hidden: true },
   { id: 'porta-janela', cat: 'esq', kind: 'op', name: 'Porta-janela', tag: 'PJ', w: 1500, h: 2100, z: 0 },
   { id: 'vao', cat: 'esq', kind: 'op', name: 'Vão livre', tag: 'V', w: 900, h: 2100, z: 0 },
-  { id: 'tomada', cat: 'ele', kind: 'pt', name: 'Tomada', code: 'T', w: 100, h: 100, z: 1100 },
-  { id: 'tomada2', cat: 'ele', kind: 'pt', name: 'Tomada dupla', code: 'T2', w: 100, h: 100, z: 1100 },
-  { id: 'int-1', cat: 'ele', kind: 'pt', name: 'Interruptor', code: 'I', w: 100, h: 100, z: 1100 },
+  { id: 'tomada', cat: 'ele', kind: 'pt', name: 'Tomada', code: 'T', w: 85, h: 120, fixed: true, z: 1100 },
+  { id: 'tomada2', cat: 'ele', kind: 'pt', name: 'Tomada dupla', code: 'T2', w: 120, h: 120, fixed: true, z: 1100 },
+  { id: 'int-1', cat: 'ele', kind: 'pt', name: 'Interruptor', code: 'I', w: 85, h: 120, fixed: true, z: 1100 },
   { id: 'quadro', cat: 'ele', kind: 'pt', name: 'Quadro de distribuição', code: 'QD', w: 300, h: 400, z: 1500 },
-  { id: 'interfone', cat: 'ele', kind: 'pt', name: 'Interfone', code: 'IF', w: 100, h: 100, z: 1500 },
-  { id: 'af', cat: 'hid', kind: 'pt', name: 'Água fria', code: 'AF', w: 100, h: 100, z: 600 },
-  { id: 'aq', cat: 'hid', kind: 'pt', name: 'Água quente', code: 'AQ', w: 100, h: 100, z: 600 },
-  { id: 'esg', cat: 'hid', kind: 'pt', name: 'Esgoto', code: 'ES', w: 100, h: 100, z: 500 },
-  { id: 'registro', cat: 'hid', kind: 'pt', name: 'Registro', code: 'RG', w: 100, h: 100, z: 1200 },
-  { id: 'gas', cat: 'hid', kind: 'pt', name: 'Gás', code: 'G', w: 100, h: 100, z: 600 },
+  { id: 'interfone', cat: 'ele', kind: 'pt', name: 'Interfone', code: 'IF', w: 85, h: 120, fixed: true, z: 1500 },
+  { id: 'af', cat: 'hid', kind: 'pt', name: 'Água fria', code: 'AF', w: 100, h: 100, fixed: true, z: 600 },
+  { id: 'aq', cat: 'hid', kind: 'pt', name: 'Água quente', code: 'AQ', w: 100, h: 100, fixed: true, z: 600 },
+  { id: 'esg', cat: 'hid', kind: 'pt', name: 'Esgoto', code: 'ES', w: 100, h: 100, fixed: true, z: 500 },
+  { id: 'registro', cat: 'hid', kind: 'pt', name: 'Registro', code: 'RG', w: 100, h: 100, fixed: true, z: 1200 },
+  { id: 'gas', cat: 'hid', kind: 'pt', name: 'Gás', code: 'G', w: 100, h: 100, fixed: true, z: 600 },
+  { id: 'bacia', cat: 'hid', kind: 'pt', name: 'Bacia sanitária', code: 'BS', w: 380, h: 780, d: 700, z: 0, zb: true },
   { id: 'dreno', cat: 'ar', kind: 'pt', name: 'Caixa do dreno (ar)', code: 'DR', w: 280, h: 150, z: 2000, zb: true },
   { id: 'coringa', cat: 'cor', kind: 'pt', name: 'Ponto coringa', code: '?', w: 300, h: 300, z: 1000 },
   /* removidos da biblioteca (continuam desenhando em projetos antigos) */
@@ -175,13 +176,14 @@ function makeItem(typeId, wall, room) {
   const L = wallLen(room, wall);
   const it = { id: uid('i'), wall, type: typeId, kind: t.kind, name: t.name, w: t.w, h: t.h, z: t.z, src: 'manual' };
   if (t.zb) it.zb = true;
+  if (t.d) it.d = t.d;
   if (t.kind === 'op') {
     it.u = Math.max(0, rnd((L - t.w) / 2, 5));
     if (typeId === 'porta-giro') { it.hinge = 'L'; it.swing = 'in'; }
     if (typeId === 'porta-giro2') it.swing = 'in';
   } else {
     it.u = rnd(L / 2, 5);
-    if (typeId === 'coringa') { it.color = '#7A5E36'; it.shape = 'rect'; }
+    if (typeId === 'coringa') { it.color = '#5A564F'; it.shape = 'rect'; }
   }
   return it;
 }
@@ -197,12 +199,15 @@ function itemBox(it) {
 /* ---------- Ambiente ---------- */
 const hasWalls = r => !!(r.pts && r.pts.length >= 3);
 const wnum = (r, i) => (r.wn && r.wn[i]) || i + 1;
-const wallOrder = r => r.pts.map((_, i) => i).sort((a, b) => wnum(r, a) - wnum(r, b));
+/* parede excluída (trecho aberto): a aresta existe só para fechar o piso, sem parede, cota ou itens */
+const wdel = (r, i) => !!(r.wd && r.wd[i]);
+const wallOrder = r => r.pts.map((_, i) => i).filter(i => !wdel(r, i)).sort((a, b) => wnum(r, a) - wnum(r, b));
+const liveWalls = r => r.pts.reduce((n, _, i) => n + (wdel(r, i) ? 0 : 1), 0);
 function newRoom(name, W, Lg, H) {
   return {
     id: uid('r'), name: name || 'Ambiente', H: H || 2700, Hsrc: 'manual',
     pts: W ? [[W, 0], [0, 0], [0, Lg], [W, Lg]] : [], wsrc: W ? [null, null, null, null] : [],
-    items: [], ceil: [], photos: [], drains: [], obs: '', tw: 120, wt: [],
+    items: [], ceil: [], photos: [], drains: [], obs: '', tw: 120, wt: [], wd: [], marks: [],
   };
 }
 function itemsOn(room, wall) {
@@ -229,6 +234,7 @@ function labelsFor(room) {
 }
 
 const wallT = (room, i) => (room.wt && room.wt[i]) || room.tw || 120;
+const wallTh = (room, i) => wdel(room, i) ? 0 : wallT(room, i);
 function wallSrc(room, i) { return room.wsrc[i] || 'manual'; }
 
 /* Alterar o comprimento da parede i: a parede seguinte desliza, o ambiente continua fechado e ortogonal.
@@ -274,6 +280,8 @@ function addNotch(room, i, u0, width, depth) {
   wn0.splice(i + 1, 0, mx0 + 1, mx0 + 2, mx0 + 3, mx0 + 4); room.wn = wn0;
   room.wsrc.splice(i + 1, 0, null, null, null, null);
   if (room.wt) room.wt.splice(i + 1, 0, 0, 0, 0, 0);
+  if (room.wd) room.wd.splice(i + 1, 0, false, false, false, false);
+  for (const m of (room.marks || [])) if (m.wall > i) m.wall += 4;
   for (const it of room.items) {
     if (it.wall > i) it.wall += 4;
     else if (it.wall === i) {
@@ -311,11 +319,11 @@ function roomSummary(room) {
   if (!hasWalls(room)) return { area: 0, per: 0, gross: 0, net: 0, vol: 0, n: 0 };
   const area = Math.abs(area2(room.pts));
   let per = 0;
-  for (let i = 0; i < room.pts.length; i++) per += wallLen(room, i);
+  for (let i = 0; i < room.pts.length; i++) if (!wdel(room, i)) per += wallLen(room, i);
   const gross = per * room.H;
   let op = 0;
   for (const it of room.items) if (it.kind === 'op') op += it.w * it.h;
-  return { area, per, gross, net: gross - op, vol: area * room.H, n: room.pts.length };
+  return { area, per, gross, net: gross - op, vol: area * room.H, n: liveWalls(room) };
 }
 
 /* ---------- Forro (gesso) ---------- */
@@ -382,6 +390,17 @@ function ceilOnWall(room, wall) {
   return out;
 }
 
+/* excluir uma parede: some a parede (cotas, itens e marcações dela); o piso continua fechado */
+function deleteWall(room, i) {
+  if (liveWalls(room) <= 1) return { ok: false, msg: 'O ambiente precisa de pelo menos uma parede.' };
+  room.wd = room.pts.map((_, k) => wdel(room, k));
+  room.wd[i] = true;
+  room.items = room.items.filter(it => it.wall !== i);
+  room.marks = (room.marks || []).filter(m => m.wall !== i);
+  return { ok: true };
+}
+function restoreWall(room, i) { if (room.wd) room.wd[i] = false; return { ok: true }; }
+
 /* ---------- Contorno à mão livre → paredes ortogonais ---------- */
 function rdp(pts, eps) {
   if (pts.length < 3) return pts.slice();
@@ -410,11 +429,60 @@ function polySimple(pts) {
   return true;
 }
 /* tr: pontos do traço em mm, na ordem do desenho. Devolve {ok, pts, wn} ou {ok:false,msg} */
+/* contorno aberto (C, L, U...): só as paredes traçadas existem; o trecho que fecha o piso vira aresta sem parede */
+function traceOpen(tr, D) {
+  const fail = msg => ({ ok: false, msg });
+  const s = rdp(tr, Math.max(0.045 * D, 150));
+  const segs = [];
+  for (let k = 0; k < s.length - 1; k++) {
+    const a = s[k], c = s[k + 1], dx = c[0] - a[0], dy = c[1] - a[1], len = Math.hypot(dx, dy);
+    if (len < 1) continue;
+    const h = Math.abs(dx) >= Math.abs(dy);
+    segs.push({ h, c: h ? (a[1] + c[1]) / 2 : (a[0] + c[0]) / 2, w: len });
+  }
+  const m = [];
+  for (const g of segs) {
+    const l = m[m.length - 1];
+    if (l && l.h === g.h) { l.c = (l.c * l.w + g.c * g.w) / (l.w + g.w); l.w += g.w; } else m.push(Object.assign({}, g));
+  }
+  if (m.length < 2) return fail('Trace pelo menos duas paredes seguidas, com um canto (L, C, U...).');
+  const q = m.length, V = [];
+  const st = s[0], en = s[s.length - 1];
+  V.push(m[0].h ? [st[0], m[0].c] : [m[0].c, st[1]]);
+  for (let k = 1; k < q; k++) { const pr = m[k - 1], sg = m[k]; V.push(sg.h ? [pr.c, sg.c] : [sg.c, pr.c]); }
+  V.push(m[q - 1].h ? [en[0], m[q - 1].c] : [m[q - 1].c, en[1]]);
+  const fo = m[0].h, lo = m[q - 1].h;
+  let pts, nreal = q;
+  if (fo === lo) {
+    /* extremidades paralelas (C, U): a aresta que fecha liga as pontas, em esquadro */
+    const A = V[0], B = V[q];
+    if (fo) { const x = (A[0] + B[0]) / 2; A[0] = x; B[0] = x; if (Math.abs(A[1] - B[1]) < 150) return fail('As duas pontas ficaram na mesma linha. Afaste-as ou trace um canto a mais.'); }
+    else { const y = (A[1] + B[1]) / 2; A[1] = y; B[1] = y; if (Math.abs(A[0] - B[0]) < 150) return fail('As duas pontas ficaram na mesma linha. Afaste-as ou trace um canto a mais.'); }
+    pts = V.slice();
+  } else {
+    /* pontas perpendiculares (L): um canto extra fecha o retângulo */
+    const A = V[0], B = V[q];
+    const Q = lo ? [B[0], A[1]] : [A[0], B[1]];
+    pts = V.concat([Q]);
+  }
+  const n = pts.length;
+  for (let k = 0; k < n; k++) pts[k] = [rnd(pts[k][0], 10), rnd(pts[k][1], 10)];
+  for (let k = 0; k < n; k++) if (Math.hypot(pts[k][0] - pts[(k + 1) % n][0], pts[k][1] - pts[(k + 1) % n][1]) < 150) return fail('Há um trecho muito curto. Refaça o desenho com cantos mais claros.');
+  if (!polySimple(pts)) return fail('O contorno se cruza. Refaça sem cruzar as linhas.');
+  const wd0 = pts.map((_, k) => k >= nreal), wn0 = pts.map((_, k) => k + 1);
+  if (area2(pts) > 0) {
+    const r = pts.slice().reverse();
+    const idx = j => (((n - 2 - j) % n) + n) % n;
+    return { ok: true, pts: r, wn: r.map((_, j) => wn0[idx(j)]), wd: r.map((_, j) => wd0[idx(j)]) };
+  }
+  return { ok: true, pts, wn: wn0, wd: wd0 };
+}
 function traceToPoly(tr) {
   const fail = msg => ({ ok: false, msg });
   if (tr.length < 6) return fail('Traço curto demais. Contorne o ambiente de canto em canto.');
   const b = bbox(tr), D = Math.max(b.w, b.h);
   if (D < 600) return fail('Desenho pequeno demais. Faça o contorno maior.');
+  if (Math.hypot(tr[0][0] - tr[tr.length - 1][0], tr[0][1] - tr[tr.length - 1][1]) > 0.2 * D) return traceOpen(tr, D);
   let s = rdp(tr.concat([tr[0]]), Math.max(0.045 * D, 150));
   s.pop();
   const segs = [];
@@ -508,8 +576,12 @@ function sampleState() {
 
 /* migração de projetos antigos (v1: ambientes soltos) e normalização */
 function normRoom(r) {
-  r.drains = r.drains || []; r.obs = r.obs || ''; r.tw = r.tw || 120; r.wt = r.wt || []; r.photos = r.photos || []; r.ceil = r.ceil || [];
+  r.drains = r.drains || []; r.obs = r.obs || ''; r.tw = r.tw || 120; r.wt = r.wt || []; r.wd = r.wd || []; r.marks = r.marks || []; r.photos = r.photos || []; r.ceil = r.ceil || [];
   for (const it of r.items) {
+    if (it.type === 'coringa' && (!it.color || it.color === '#7A5E36')) it.color = '#5A564F';
+    const lt = LIBMAP[it.type];
+    if (lt && lt.fixed) { it.w = lt.w; it.h = lt.h; }
+    if (it.type === 'bacia' && !it.d) it.d = 700;
     if (it.type === 'dreno' && !it.zb) { it.zb = true; it.w = 280; it.h = 150; it.z = Math.max(0, it.z - 75); }
   }
   return r;

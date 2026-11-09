@@ -57,8 +57,8 @@ function pdfLegend(G, x, y) {
   y += 11;
   const c = { G, v: new View(1, 0, 0), K: 1, P, hit: false };
   const row = (draw, label) => { draw(); G.text(x + 24, y, label, { size: 7.2, anchor: 'start', fill: P.ink }); y += 12.5; };
-  row(() => { G.circle(x + 7, y, 5.5, { fill: '#FFFFFF', stroke: P.ele, w: 1.4 }); G.text(x + 7, y, 'T', { size: 6, bold: true, fill: P.ele }); }, 'Elétrica (círculo)');
-  row(() => { G.rect(x + 1.5, y - 5.5, 11, 11, { fill: '#FFFFFF', stroke: P.hid, w: 1.4 }); G.text(x + 7, y, 'AF', { size: 5.5, bold: true, fill: P.hid }); }, 'Hidráulica (quadrado)');
+  row(() => { G.rect(x + 2.5, y - 5.5, 9, 11, { fill: '#FFFFFF', stroke: P.ele, w: 1.4 }); G.text(x + 7, y, 'T', { size: 6, bold: true, fill: P.ele }); }, 'Elétrica (85 × 120)');
+  row(() => { G.circle(x + 7, y, 5.5, { fill: '#FFFFFF', stroke: P.hid, w: 1.4 }); G.text(x + 7, y, 'AF', { size: 5.5, bold: true, fill: P.hid }); }, 'Hidráulica (ø 100)');
   row(() => { G.rect(x, y - 4, 14, 8, { fill: '#FFFFFF', stroke: P.ar, w: 1.4, r: 2 }); G.text(x + 7, y, 'AC', { size: 5.5, bold: true, fill: P.ar }); }, 'Ar condicionado');
   row(() => { G.rect(x, y - 5, 14, 10, { fill: '#FFFFFF', stroke: P.cor, w: 1.2, dash: [2, 1.5] }); G.text(x + 7, y, '?', { size: 6, bold: true, fill: P.cor }); }, 'Ponto coringa');
   row(() => { G.poly([[x, y - 5], [x + 14, y - 5], [x + 14, y + 4], [x, y + 4]], { fill: P.gesso, stroke: P.gessoLn, w: 0.8 }); }, 'Forro de gesso (rebaixo)');
