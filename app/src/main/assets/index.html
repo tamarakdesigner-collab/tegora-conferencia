@@ -1158,7 +1158,8 @@ function dimLine(c, p1, p2, nw, off, text, o) {
   if (ang > 90) ang -= 180; if (ang < -90) ang += 180;
   const fs = (o.size || 8.5) * K;
   const tp = o.tpos == null ? 0.5 : o.tpos;
-  const mx = a[0] + (b[0] - a[0]) * tp + nx * (fs * 0.72 + 1.5 * K), my = a[1] + (b[1] - a[1]) * tp + ny * (fs * 0.72 + 1.5 * K);
+  const to = (o.toff || 0) * K;
+  const mx = a[0] + (b[0] - a[0]) * tp + nx * (fs * 0.72 + 1.5 * K + to), my = a[1] + (b[1] - a[1]) * tp + ny * (fs * 0.72 + 1.5 * K + to);
   G.text(mx, my, text, { size: fs, rot: ang, fill: o.tcolor || P.ink, font: 'mono', bold: o.bold });
   if (o.src === 'laser') {
     const w = textW(text, fs, { font: 'mono' });
@@ -1305,6 +1306,7 @@ function drawPlan(c, room, o) {
     const g = wallGeom(room, o.selWall);
     G.line(...dev(c, g.A), ...dev(c, g.B), { stroke: P.sel, w: 3 * K });
   }
+  const dimGroups = [];
   for (let i = 0; i < n; i++) {
     if (wdel(room, i)) continue;
     const g = wallGeom(room, i);
@@ -1314,15 +1316,11 @@ function drawPlan(c, room, o) {
     const m = dev(c, mid);
     badge(c, m[0], m[1], String(wnum(room, i)), { fill: i === o.selWall ? P.sel : P.paper, stroke: i === o.selWall ? P.sel : P.ink, tcolor: i === o.selWall ? '#FFFFFF' : P.ink });
     const out = [-g.nin[0], -g.nin[1]];
-    const base = twPx / K + 12;
     const ch = chainSegs(room, i);
-    let off = base;
-    if (ch.ops.length) {
-      for (const s of ch.segs) dimLine(c, vadd(g.A, vmul(g.d, s.a)), vadd(g.A, vmul(g.d, s.b)), out, off, fmt(s.b - s.a), { src: s.src });
-      off += 15;
-    }
-    dimLine(c, g.A, g.B, out, off, fmt(g.L), { src: room.wsrc[i], bold: true });
+    if (ch.ops.length) dimGroups.push({ wall: i, g, out, lvl: 0, items: ch.segs.map(q => ({ p1: vadd(g.A, vmul(g.d, q.a)), p2: vadd(g.A, vmul(g.d, q.b)), text: fmt(q.b - q.a), o: { src: q.src } })) });
+    dimGroups.push({ wall: i, g, out, lvl: 1, items: [{ p1: g.A, p2: g.B, text: fmt(g.L), o: { src: room.wsrc[i], bold: true } }] });
   }
+  if (!o.mini) placeDims(c, room, dimGroups, twPx / K + 12, twArr);
   if (!o.mini) {
     const ct = centroid(room.pts), q = dev(c, ct);
     const s = roomSummary(room);
@@ -1331,6 +1329,63 @@ function drawPlan(c, room, o) {
     G.text(q[0], q[1] + 7 * K, (s.area / 1e6).toFixed(2).replace('.', ',') + ' m²', { size: 9 * K, font: 'mono', fill: P.mut });
     G.text(q[0], q[1] + 19 * K, 'pé-direito ' + fmt(room.H), { size: 8 * K, font: 'mono', fill: P.mut });
     if (room.Hsrc === 'laser') checkMark(c, q[0] - textW('pé-direito ' + fmt(room.H), 8 * K, { font: 'mono' }) / 2 - 5 * K, q[1] + 19 * K, 6 * K, P.dim);
+  }
+}
+
+
+/* Distribuição automática das cotas da planta: cada fileira procura o primeiro afastamento livre,
+   sem encostar em outras cotas, textos ou paredes; textos que não cabem no vão sobem em degraus. */
+function placeDims(c, room, groups, base, twArr) {
+  const { v, K, P } = c, fs = 8.5 * K, tH = fs * 1.5 + 2 * K;
+  const placed = [], walls = [];
+  room.pts.forEach((p, j) => {
+    if (wdel(room, j)) return;
+    const g = wallGeom(room, j), t = twArr[j] || 0;
+    const pp = [g.A, g.B, vadd(g.B, vmul(g.nin, -t)), vadd(g.A, vmul(g.nin, -t))].map(q => dev(c, q));
+    const xs = pp.map(q => q[0]), ys = pp.map(q => q[1]);
+    walls.push([Math.min(...xs) - K, Math.max(...xs) + K, Math.min(...ys) - K, Math.max(...ys) + K, j]);
+  });
+  const hit = (a, b) => a[0] < b[1] && b[0] < a[1] && a[2] < b[3] && b[2] < a[3];
+  const boxOf = (grp, off, tl) => {
+    const nx0 = grp.out[0], ny0 = -grp.out[1], nl = Math.hypot(nx0, ny0) || 1, nx = nx0 / nl, ny = ny0 / nl;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    grp.items.forEach((it, k) => {
+      const a = dev(c, it.p1), b = dev(c, it.p2), tw = textW(it.text, fs, { font: 'mono' }) + 6 * K;
+      const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], span = Math.hypot(b[0] - a[0], b[1] - a[1]), hw = Math.max(span, tw) / 2;
+      const ux = span > 0.01 ? (b[0] - a[0]) / span : 1, uy = span > 0.01 ? (b[1] - a[1]) / span : 0;
+      const d0 = off * K - 2 * K, d1 = off * K + tH + (tl[k] || 0) * K;
+      for (const [ss, dd] of [[-hw, d0], [hw, d0], [-hw, d1], [hw, d1]]) { const px = m[0] + ux * ss + nx * dd, py = m[1] + uy * ss + ny * dd; x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py); }
+    });
+    return [x0, x1, y0, y1];
+  };
+  const tlevels = grp => {
+    /* degraus de texto para vãos estreitos vizinhos */
+    const lv = [], occ = [];
+    grp.items.forEach((it, k) => {
+      const a = dev(c, it.p1), b = dev(c, it.p2), tw = textW(it.text, fs, { font: 'mono' }) + 6 * K, span = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      const m = (a[0] + b[0]) / 2 + (a[1] + b[1]) / 2;
+      if (grp.items.length === 1 || span >= tw) { lv.push(0); return; }
+      let l = 1;
+      for (; l < 6; l++) { if (!(occ[l] || []).some(q => Math.abs(q - m) < tw * 0.95)) break; }
+      (occ[l] = occ[l] || []).push(m); lv.push(l * 9);
+    });
+    return lv;
+  };
+  const order = groups.slice().sort((a, b) => a.lvl - b.lvl);
+  const offOf = new Map();
+  for (const grp of order) {
+    const tl = tlevels(grp);
+    let off = base;
+    const inner = offOf.get(grp.wall);
+    if (grp.lvl === 1 && inner != null) off = Math.max(off, inner + 15 + Math.max(0, ...tl) * 0.0);
+    let ok = false;
+    for (let guard = 0; guard < 60 && !ok; guard++) {
+      const bx = boxOf(grp, off, tl);
+      if (!placed.some(q => hit(bx, q)) && !walls.some(q => q[4] !== grp.wall && hit(bx, q))) { placed.push(bx); ok = true; } else off += 6;
+    }
+    if (!ok) placed.push(boxOf(grp, off, tl));
+    if (grp.lvl === 0) offOf.set(grp.wall, off + Math.max(0, ...tl));
+    grp.items.forEach((it, k) => dimLine(c, it.p1, it.p2, grp.out, off, it.text, Object.assign({ toff: tl[k] || 0 }, it.o)));
   }
 }
 
@@ -1559,30 +1614,30 @@ function ptDimsAll(c, pts, L) {
   const colOf = it => { const cat = LIBMAP[it.type].cat; return cat === 'cor' ? P.dim : P[cat]; };
   const refsOf = it => it.type === 'coringa' ? [it.u - it.w / 2, it.u + it.w / 2] : [it.u];
   const info = pts.map(it => ({ it, cat: LIBMAP[it.type].cat, refs: refsOf(it), cz: it.type === 'coringa' ? it.z - it.h / 2 : zc(it), cy: v.Y(zc(it)), half: Math.max(it.h * v.s, 15 * K) / 2, col: colOf(it) }));
-  const bands = info.map(i => [i.cy - i.half - 14 * K, i.cy + i.half + 4 * K]);
-  const groups = [];
-  for (const i of info.slice().sort((a, b) => b.cz - a.cz)) {
-    const g = groups.find(q => q.cat === i.cat && Math.abs(q.cz - i.cz) <= 5);
-    if (g) g.items.push(i); else groups.push({ cat: i.cat, cz: i.cz, cy: v.Y(i.cz), items: [i] });
-  }
+  /* cada ponto é cotado sozinho, da extremidade esquerda e da direita da parede ao ponto (nunca de um ponto a outro) */
+  const gl = info.map(i => ({ i, x0: v.X(i.it.u) - Math.max(i.it.w * v.s, 15 * K) / 2 - 2 * K, x1: v.X(i.it.u) + Math.max(i.it.w * v.s, 15 * K) / 2 + 2 * K, y0: i.cy - i.half - 11 * K, y1: i.cy + i.half + 2 * K }));
   const used = [];
-  for (const g of groups) {
-    const half = Math.max(...g.items.map(i => i.half));
-    const rl = []; g.items.forEach(i => i.refs.forEach(r => rl.push([r, i.col]))); rl.sort((a, b) => a[0] - b[0]);
-    const xs = [0], cols = [];
-    for (const [r, col] of rl) { if (r - xs[xs.length - 1] > 1) { xs.push(r); cols.push(col); } else if (xs.length === 1) { cols.push(col); xs.push(r + 0.0001); } }
-    if (L - xs[xs.length - 1] > 1) { xs.push(L); cols.push(g.items[g.items.length - 1].col); }
-    /* altura (em degraus) que os textos vão ocupar */
-    const tmp = hChainLevels(c, xs, fs);
-    const floorY = v.Y(0), topY = v.Y(c.H || 1e9);
-    let off = half + 12 * K, dir = -1, ok = false;
-    for (let guard = 0; guard < 60 && !ok; guard++) {
-      const lineY = g.cy - dir * off;
-      const y0 = dir < 0 ? lineY - 9 * K : lineY - (11 + tmp * 9) * K, y1 = dir < 0 ? lineY + (11 + tmp * 9) * K : lineY + 9 * K;
-      if (dir < 0 && y1 > floorY - 2 * K) { dir = 1; off = half + 12 * K; continue; }
-      if (![...bands, ...used].some(b => y0 < b[1] && b[0] < y1)) { used.push([y0, y1]); ok = true; } else off += 10 * K;
+  const floorY = v.Y(0);
+  const tH = fs * 1.5 + 2 * K;
+  for (const i of info.slice().sort((a, b) => b.cz - a.cz)) {
+    const z = i.it.type === 'coringa' ? i.it.z : zc(i.it);
+    const spans = [[0, i.refs[0]], [i.refs[i.refs.length - 1], L]];
+    for (const [a, b] of spans) {
+      if (b - a < 1) continue;
+      const txt = fmt(b - a), tw = textW(txt, fs, { font: 'mono' }) + 6 * K;
+      const xa = v.X(a), xb = v.X(b), mid = (xa + xb) / 2, hw = Math.max(Math.abs(xb - xa), tw) / 2;
+      let pick = 0;
+      for (let k = 0; k < 40; k++) {
+        const off = k === 0 ? 0 : (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 11;
+        const yb = v.Y(z) - off * K, y0 = yb - tH, y1 = yb + 3 * K;
+        if (y1 > floorY - 1 * K) continue;
+        const clash = used.some(q => mid - hw < q[1] && q[0] < mid + hw && y0 < q[3] && q[2] < y1)
+          || gl.some(q => q.i !== i && Math.min(xa, xb) < q.x1 && q.x0 < Math.max(xa, xb) && y0 < q.y1 && q.y0 < y1);
+        if (!clash) { pick = off; used.push([mid - hw, mid + hw, y0, y1]); break; }
+        if (k === 39) { pick = off; used.push([mid - hw, mid + hw, y0, y1]); }
+      }
+      dimLine(c, [a, z], [b, z], [0, 1], pick, txt, { color: i.col, tcolor: i.col, size: 7.2 });
     }
-    hChain(c, xs, g.cz, dir, off / K, cols, { size: 7.2 });
   }
   /* alturas: do piso até o ponto (até a base, no dreno) */
   const cols2 = info.slice().sort((a, b) => a.it.u - b.it.u);
@@ -1708,11 +1763,6 @@ function drawWall(c, room, wi, o) {
     const ch = chainSegs(room, wi);
     for (const s of ch.segs) dimLine(c, [s.a, H], [s.b, H], up, off, fmt(s.b - s.a), { src: s.src });
     off += 15;
-  }
-  if (pts.length && pts.length <= 10 && !o.ptDims) {
-    const xs = [0, ...pts.flatMap(p => p.type === 'coringa' ? [p.u - p.w / 2, p.u + p.w / 2] : [p.u]), L].sort((a, b) => a - b);
-    const lv = hChain(c, xs, H, 1, off, [P.mut], { size: 7.6 });
-    off += 15 + lv * 8.5;
   }
   dimLine(c, [0, H], [L, H], up, off, fmt(L), { src: room.wsrc[wi], bold: true });
   dimLine(c, [0, 0], [0, H], [-1, 0], 14, fmt(H), { src: room.Hsrc, bold: true });
@@ -1969,40 +2019,35 @@ function pdfCeilPage(doc, ctx, room, total) {
   pdfLegend(G, sx, y + 60);
 }
 
-function pdfWallPage(doc, ctx, room, wi, total) {
-  const g = wallGeom(room, wi);
-  const G = pdfFrame(doc, ctx, 'Parede ' + wnum(room, wi) + ' · ' + room.name, 'Vista frontal · comprimento ' + fmt(g.L, ctx.unit, true) + ' · pé-direito ' + fmt(room.H, ctx.unit, true), ctx.pg(), total);
-  const P = PAL_PRINT;
-  const items = itemsOn(room, wi);
-  const lab = labelsFor(room);
-  const nRows = items.length;
-  const tblH = Math.min(nRows, 12) * 12 + 40;
-  const area = { x: PM, y: PM + 38, w: PW - 2 * PM, h: PH - 2 * PM - 48 - (nRows ? tblH + 6 : 0) };
-  const v = View.fit({ x0: 0, y0: 0, x1: g.L, y1: room.H + wallTopExtra(room) }, area, 0);
-  /* margens para as cotas: reduz a escala */
-  const padL = 46, padT = 62, padR = 56, padB = 22;
-  const box = { x: area.x + padL, y: area.y + padT, w: area.w - padL - padR - 112, h: area.h - padT - padB };
+/* duas vistas de parede por página, lado a lado */
+function pdfWallCol(G, room, wi, x0, cw, y0, ch) {
+  const g = wallGeom(room, wi), P = PAL_PRINT, items = itemsOn(room, wi), lab = labelsFor(room);
+  G.text(x0, y0 + 6, 'PAREDE ' + wnum(room, wi), { size: 9.5, bold: true, anchor: 'start', fill: P.ink });
+  G.text(x0 + cw, y0 + 6, fmt(g.L, UNIT, true) + ' × ' + fmt(room.H, UNIT, true), { size: 7.4, anchor: 'end', fill: P.mut });
+  G.line(x0, y0 + 11, x0 + cw, y0 + 11, { stroke: P.faint, w: 0.6 });
+  const maxRows = 7, nRows = Math.min(items.length, maxRows), tblH = nRows ? (nRows + 1) * 11 + (items.length > maxRows ? 10 : 0) + 8 : 0;
+  const box = { x: x0 + 34, y: y0 + 16 + 58, w: cw - 34 - 30, h: ch - 16 - 58 - 14 - tblH };
   const vv = View.fit({ x0: 0, y0: 0, x1: g.L, y1: room.H + wallTopExtra(room) }, box, 0);
   drawWall({ G, v: vv, K: 1, P, hit: false }, room, wi, { allDims: true, ptDims: true });
-  /* miniatura */
-  const mw = 100, mh = 80, mx = PW - PM - mw, my = area.y + 4;
-  G.text(mx, my, 'POSIÇÃO NA PLANTA', { size: 6.5, bold: true, anchor: 'start', fill: P.accent });
-  const mv = View.fit(bbox(room.pts), { x: mx, y: my + 6, w: mw, h: mh }, 6);
-  drawMini({ G, v: mv, K: 1, P, hit: false }, room, wi);
-  G.text(mx, my + mh + 16, 'Seta: sentido da vista', { size: 6.3, anchor: 'start', fill: P.mut });
-  /* tabela */
   if (nRows) {
-    const ty = PH - PM - 4 - tblH + 6;
-    const cols = [{ h: 'Id', w: 30 }, { h: 'Item', w: 190 }, { h: 'Cat.', w: 80 }, { h: 'Dist. esq.', w: 70, a: 'r' }, { h: 'Dist. dir.', w: 70, a: 'r' }, { h: 'Altura (z)', w: 70, a: 'r' }, { h: 'L × A', w: 90, a: 'r' }, { h: 'Origem', w: 70 }];
-    const rows = items.slice(0, 12).map(it => {
+    const ty = y0 + ch - tblH + 4;
+    const cols = [{ h: 'Id', w: 22 }, { h: 'Item', w: cw - 22 - 38 - 44 - 44 - 44 - 56 }, { h: 'Cat.', w: 38 }, { h: 'Esq.', w: 44, a: 'r' }, { h: 'Dir.', w: 44, a: 'r' }, { h: 'Altura', w: 44, a: 'r' }, { h: 'L × A', w: 56, a: 'r' }];
+    const rows = items.slice(0, maxRows).map(it => {
       const tid = it.kind === 'op' ? lab.tags[it.id] : String(lab.nums[it.id]);
       const left = it.kind === 'op' ? it.u : it.u - it.w / 2, right = g.L - (it.kind === 'op' ? it.u + it.w : it.u + it.w / 2);
       const cat = CATS.find(c => c.id === LIBMAP[it.type].cat).short;
-      return [tid, it.name, cat, fmt(left), fmt(right), it.kind === 'op' ? (it.z ? fmt(it.z) : 'piso') : fmt(it.z), fmt(it.w) + '×' + fmt(it.h), SRC_TXT[it.src] || 'manual'];
+      return [tid, it.name, cat.slice(0, 5), fmt(left), fmt(right), it.kind === 'op' ? (it.z ? fmt(it.z) : 'piso') : fmt(it.z), fmt(it.w) + '×' + fmt(it.h)];
     });
-    pdfTable(G, PM, ty, cols, rows, { rh: 12, fs: 7 });
-    if (nRows > 12) G.text(PM, ty + 12 * 13 + 8, '+ ' + (nRows - 12) + ' itens não listados.', { size: 6.5, anchor: 'start', fill: P.mut });
+    pdfTable(G, x0, ty, cols, rows, { rh: 11, fs: 6.6 });
+    if (items.length > maxRows) G.text(x0, ty + (nRows + 1) * 11 + 6, '+ ' + (items.length - maxRows) + ' itens não listados.', { size: 6.3, anchor: 'start', fill: P.mut });
   }
+}
+function pdfWallPage(doc, ctx, room, wi, wj, total) {
+  const ws = wj == null ? [wi] : [wi, wj];
+  const G = pdfFrame(doc, ctx, 'Parede ' + ws.map(w => wnum(room, w)).join(' e ') + ' · ' + room.name, 'Vistas frontais · pé-direito ' + fmt(room.H, ctx.unit, true), ctx.pg(), total);
+  const gap = 18, cw = (PW - 2 * PM - gap) / 2, y0 = PM + 38, ch = PH - 2 * PM - 48;
+  ws.forEach((w, k) => pdfWallCol(G, room, w, PM + k * (cw + gap), cw, y0, ch));
+  if (ws.length === 2) G.line(PM + cw + gap / 2, y0, PM + cw + gap / 2, y0 + ch, { stroke: PAL_PRINT.faint, w: 0.5 });
 }
 
 function pdfPhotoPage(doc, ctx, room, ph, idx, total) {
@@ -2034,7 +2079,8 @@ function buildPdf(state, photoBytes) {
     if (hasWalls(r)) {
       pages.push(['plan', ri]);
       if (r.ceil.length || (r.beams || []).length) pages.push(['ceil', ri]);
-      wallOrder(r).forEach(wi => pages.push(['wall', ri, wi]));
+      const wo = wallOrder(r);
+      for (let k = 0; k < wo.length; k += 2) pages.push(['wall', ri, wo[k], wo[k + 1]]);
     }
     (r.photos || []).forEach((p, k) => pages.push(['photo', ri, k]));
   });
@@ -2045,7 +2091,7 @@ function buildPdf(state, photoBytes) {
     const r = state.rooms[p[1]];
     if (p[0] === 'plan') pdfPlanPage(doc, ctx, r, p[1], total);
     else if (p[0] === 'ceil') pdfCeilPage(doc, ctx, r, total);
-    else if (p[0] === 'wall') pdfWallPage(doc, ctx, r, p[2], total);
+    else if (p[0] === 'wall') pdfWallPage(doc, ctx, r, p[2], p[3], total);
     else pdfPhotoPage(doc, ctx, r, r.photos[p[2]], p[2], total);
   }
   setUnit(saved);
@@ -2450,12 +2496,12 @@ function panelPhotos() {
   return h;
 }
 
-function pagesOf(rooms) { return rooms.reduce((n, r) => n + (hasWalls(r) ? 1 + ((r.ceil.length || (r.beams || []).length) ? 1 : 0) + liveWalls(r) : 0) + r.photos.length, 0); }
+function pagesOf(rooms) { return rooms.reduce((n, r) => n + (hasWalls(r) ? 1 + ((r.ceil.length || (r.beams || []).length) ? 1 : 0) + Math.ceil(liveWalls(r) / 2) : 0) + r.photos.length, 0); }
 function panelExport() {
   const c = CL(), room = R();
   let h = `<h2>Exportar</h2><p class="muted small" style="margin:0 0 8px">Cliente: <b>${eh(c.nome || '—')}</b>. Os dados do cliente ficam na tela do cliente.</p>`;
   if (UI.lastFile) h += `<div class="card"><div class="row"><span class="small" style="flex:1;min-width:0;overflow-wrap:anywhere">Pronto: <b>${eh(UI.lastFile.name)}</b></span><button class="btn" data-act="enviar">Enviar</button></div></div>`;
-  h += `<h3>PDF cotado</h3><div class="card"><p class="small" style="margin:0 0 10px">Planta, forro, uma vista por parede (com as cotas dos pontos nas cores de cada categoria), fotos e observações, com a marca Tégora.</p><div class="row"><button class="btn" data-act="expPdf" data-v="room">Só ${eh(room.name)} (${pagesOf([room])} pág.)</button><button class="btn sec" data-act="expPdf" data-v="all">Cliente inteiro (${pagesOf(c.rooms)} pág.)</button></div></div>`;
+  h += `<h3>PDF cotado</h3><div class="card"><p class="small" style="margin:0 0 10px">Planta, forro, duas vistas de parede por página (cada ponto cotado a partir das extremidades da parede, nas cores de cada categoria), fotos e observações, com a marca Tégora.</p><div class="row"><button class="btn" data-act="expPdf" data-v="room">Só ${eh(room.name)} (${pagesOf([room])} pág.)</button><button class="btn sec" data-act="expPdf" data-v="all">Cliente inteiro (${pagesOf(c.rooms)} pág.)</button></div></div>`;
   h += `<h3>DXF da planta (Promob)</h3><div class="card"><p class="small" style="margin:0 0 10px">Somente a <b>planta baixa</b>, um arquivo .dxf por ambiente (AutoCAD R12, em mm, CRLF) com as duas faces da parede (interna e externa, pela espessura informada), esquadrias e ralos, só com LINE, ARC e CIRCLE: sem textos, cotas, blocos, polilinhas nem hachuras. Vai dentro de um .zip.</p><div class="row"><button class="btn" data-act="expDxf" data-v="room">Só ${eh(room.name)}</button><button class="btn sec" data-act="expDxf" data-v="all">Todos os ambientes</button></div></div>`;
   h += `<h3>Trena Bluetooth (GLM 50 C)</h3><div class="card"><div id="btdiag">${btDiagHtml()}</div><div class="row" style="margin-top:10px"><button class="btn sm" data-act="conectar">${BT.state === 'on' ? 'Desconectar' : 'Conectar trena'}</button><button class="btn sec sm" data-act="conectarTodos">Listar todos os dispositivos</button><button class="btn sec sm" data-act="conectarSerial">Bluetooth clássico (PC)</button><button class="btn sec sm" data-act="conectarSerialTodas">Clássico: listar todas as portas</button></div><div class="row" style="margin-top:8px"><button class="btn sec sm" data-act="btSync">Reenviar sincronização</button><button class="btn sec sm" data-act="btStart">Disparar medição</button><button class="btn sec sm" data-act="btLaser">Disparar laser</button><button class="btn sec sm" data-act="btCopy">Copiar registro</button></div><p class="muted small" style="margin:8px 0 0">Ligue o Bluetooth da trena (tecla de Bluetooth). Com ela conectada, toque em “Medir” ao lado do campo e meça: o valor entra no campo.</p></div>`;
   h += `<h3>Backup</h3><div class="card"><p class="small" style="margin:0 0 10px">Cópia de segurança de todos os clientes, para reabrir depois ou em outro aparelho.</p><div class="row"><button class="btn sec" data-act="expJson">Salvar backup</button><label class="btn sec" style="display:inline-block">Abrir backup<input type="file" accept=".json,application/json" data-act="impJson" hidden></label></div></div>`;

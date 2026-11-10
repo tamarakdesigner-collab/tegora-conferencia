@@ -59,7 +59,8 @@ function dimLine(c, p1, p2, nw, off, text, o) {
   if (ang > 90) ang -= 180; if (ang < -90) ang += 180;
   const fs = (o.size || 8.5) * K;
   const tp = o.tpos == null ? 0.5 : o.tpos;
-  const mx = a[0] + (b[0] - a[0]) * tp + nx * (fs * 0.72 + 1.5 * K), my = a[1] + (b[1] - a[1]) * tp + ny * (fs * 0.72 + 1.5 * K);
+  const to = (o.toff || 0) * K;
+  const mx = a[0] + (b[0] - a[0]) * tp + nx * (fs * 0.72 + 1.5 * K + to), my = a[1] + (b[1] - a[1]) * tp + ny * (fs * 0.72 + 1.5 * K + to);
   G.text(mx, my, text, { size: fs, rot: ang, fill: o.tcolor || P.ink, font: 'mono', bold: o.bold });
   if (o.src === 'laser') {
     const w = textW(text, fs, { font: 'mono' });
@@ -206,6 +207,7 @@ function drawPlan(c, room, o) {
     const g = wallGeom(room, o.selWall);
     G.line(...dev(c, g.A), ...dev(c, g.B), { stroke: P.sel, w: 3 * K });
   }
+  const dimGroups = [];
   for (let i = 0; i < n; i++) {
     if (wdel(room, i)) continue;
     const g = wallGeom(room, i);
@@ -215,15 +217,11 @@ function drawPlan(c, room, o) {
     const m = dev(c, mid);
     badge(c, m[0], m[1], String(wnum(room, i)), { fill: i === o.selWall ? P.sel : P.paper, stroke: i === o.selWall ? P.sel : P.ink, tcolor: i === o.selWall ? '#FFFFFF' : P.ink });
     const out = [-g.nin[0], -g.nin[1]];
-    const base = twPx / K + 12;
     const ch = chainSegs(room, i);
-    let off = base;
-    if (ch.ops.length) {
-      for (const s of ch.segs) dimLine(c, vadd(g.A, vmul(g.d, s.a)), vadd(g.A, vmul(g.d, s.b)), out, off, fmt(s.b - s.a), { src: s.src });
-      off += 15;
-    }
-    dimLine(c, g.A, g.B, out, off, fmt(g.L), { src: room.wsrc[i], bold: true });
+    if (ch.ops.length) dimGroups.push({ wall: i, g, out, lvl: 0, items: ch.segs.map(q => ({ p1: vadd(g.A, vmul(g.d, q.a)), p2: vadd(g.A, vmul(g.d, q.b)), text: fmt(q.b - q.a), o: { src: q.src } })) });
+    dimGroups.push({ wall: i, g, out, lvl: 1, items: [{ p1: g.A, p2: g.B, text: fmt(g.L), o: { src: room.wsrc[i], bold: true } }] });
   }
+  if (!o.mini) placeDims(c, room, dimGroups, twPx / K + 12, twArr);
   if (!o.mini) {
     const ct = centroid(room.pts), q = dev(c, ct);
     const s = roomSummary(room);
@@ -232,6 +230,63 @@ function drawPlan(c, room, o) {
     G.text(q[0], q[1] + 7 * K, (s.area / 1e6).toFixed(2).replace('.', ',') + ' m²', { size: 9 * K, font: 'mono', fill: P.mut });
     G.text(q[0], q[1] + 19 * K, 'pé-direito ' + fmt(room.H), { size: 8 * K, font: 'mono', fill: P.mut });
     if (room.Hsrc === 'laser') checkMark(c, q[0] - textW('pé-direito ' + fmt(room.H), 8 * K, { font: 'mono' }) / 2 - 5 * K, q[1] + 19 * K, 6 * K, P.dim);
+  }
+}
+
+
+/* Distribuição automática das cotas da planta: cada fileira procura o primeiro afastamento livre,
+   sem encostar em outras cotas, textos ou paredes; textos que não cabem no vão sobem em degraus. */
+function placeDims(c, room, groups, base, twArr) {
+  const { v, K, P } = c, fs = 8.5 * K, tH = fs * 1.5 + 2 * K;
+  const placed = [], walls = [];
+  room.pts.forEach((p, j) => {
+    if (wdel(room, j)) return;
+    const g = wallGeom(room, j), t = twArr[j] || 0;
+    const pp = [g.A, g.B, vadd(g.B, vmul(g.nin, -t)), vadd(g.A, vmul(g.nin, -t))].map(q => dev(c, q));
+    const xs = pp.map(q => q[0]), ys = pp.map(q => q[1]);
+    walls.push([Math.min(...xs) - K, Math.max(...xs) + K, Math.min(...ys) - K, Math.max(...ys) + K, j]);
+  });
+  const hit = (a, b) => a[0] < b[1] && b[0] < a[1] && a[2] < b[3] && b[2] < a[3];
+  const boxOf = (grp, off, tl) => {
+    const nx0 = grp.out[0], ny0 = -grp.out[1], nl = Math.hypot(nx0, ny0) || 1, nx = nx0 / nl, ny = ny0 / nl;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    grp.items.forEach((it, k) => {
+      const a = dev(c, it.p1), b = dev(c, it.p2), tw = textW(it.text, fs, { font: 'mono' }) + 6 * K;
+      const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], span = Math.hypot(b[0] - a[0], b[1] - a[1]), hw = Math.max(span, tw) / 2;
+      const ux = span > 0.01 ? (b[0] - a[0]) / span : 1, uy = span > 0.01 ? (b[1] - a[1]) / span : 0;
+      const d0 = off * K - 2 * K, d1 = off * K + tH + (tl[k] || 0) * K;
+      for (const [ss, dd] of [[-hw, d0], [hw, d0], [-hw, d1], [hw, d1]]) { const px = m[0] + ux * ss + nx * dd, py = m[1] + uy * ss + ny * dd; x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py); }
+    });
+    return [x0, x1, y0, y1];
+  };
+  const tlevels = grp => {
+    /* degraus de texto para vãos estreitos vizinhos */
+    const lv = [], occ = [];
+    grp.items.forEach((it, k) => {
+      const a = dev(c, it.p1), b = dev(c, it.p2), tw = textW(it.text, fs, { font: 'mono' }) + 6 * K, span = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      const m = (a[0] + b[0]) / 2 + (a[1] + b[1]) / 2;
+      if (grp.items.length === 1 || span >= tw) { lv.push(0); return; }
+      let l = 1;
+      for (; l < 6; l++) { if (!(occ[l] || []).some(q => Math.abs(q - m) < tw * 0.95)) break; }
+      (occ[l] = occ[l] || []).push(m); lv.push(l * 9);
+    });
+    return lv;
+  };
+  const order = groups.slice().sort((a, b) => a.lvl - b.lvl);
+  const offOf = new Map();
+  for (const grp of order) {
+    const tl = tlevels(grp);
+    let off = base;
+    const inner = offOf.get(grp.wall);
+    if (grp.lvl === 1 && inner != null) off = Math.max(off, inner + 15 + Math.max(0, ...tl) * 0.0);
+    let ok = false;
+    for (let guard = 0; guard < 60 && !ok; guard++) {
+      const bx = boxOf(grp, off, tl);
+      if (!placed.some(q => hit(bx, q)) && !walls.some(q => q[4] !== grp.wall && hit(bx, q))) { placed.push(bx); ok = true; } else off += 6;
+    }
+    if (!ok) placed.push(boxOf(grp, off, tl));
+    if (grp.lvl === 0) offOf.set(grp.wall, off + Math.max(0, ...tl));
+    grp.items.forEach((it, k) => dimLine(c, it.p1, it.p2, grp.out, off, it.text, Object.assign({ toff: tl[k] || 0 }, it.o)));
   }
 }
 
@@ -460,30 +515,30 @@ function ptDimsAll(c, pts, L) {
   const colOf = it => { const cat = LIBMAP[it.type].cat; return cat === 'cor' ? P.dim : P[cat]; };
   const refsOf = it => it.type === 'coringa' ? [it.u - it.w / 2, it.u + it.w / 2] : [it.u];
   const info = pts.map(it => ({ it, cat: LIBMAP[it.type].cat, refs: refsOf(it), cz: it.type === 'coringa' ? it.z - it.h / 2 : zc(it), cy: v.Y(zc(it)), half: Math.max(it.h * v.s, 15 * K) / 2, col: colOf(it) }));
-  const bands = info.map(i => [i.cy - i.half - 14 * K, i.cy + i.half + 4 * K]);
-  const groups = [];
-  for (const i of info.slice().sort((a, b) => b.cz - a.cz)) {
-    const g = groups.find(q => q.cat === i.cat && Math.abs(q.cz - i.cz) <= 5);
-    if (g) g.items.push(i); else groups.push({ cat: i.cat, cz: i.cz, cy: v.Y(i.cz), items: [i] });
-  }
+  /* cada ponto é cotado sozinho, da extremidade esquerda e da direita da parede ao ponto (nunca de um ponto a outro) */
+  const gl = info.map(i => ({ i, x0: v.X(i.it.u) - Math.max(i.it.w * v.s, 15 * K) / 2 - 2 * K, x1: v.X(i.it.u) + Math.max(i.it.w * v.s, 15 * K) / 2 + 2 * K, y0: i.cy - i.half - 11 * K, y1: i.cy + i.half + 2 * K }));
   const used = [];
-  for (const g of groups) {
-    const half = Math.max(...g.items.map(i => i.half));
-    const rl = []; g.items.forEach(i => i.refs.forEach(r => rl.push([r, i.col]))); rl.sort((a, b) => a[0] - b[0]);
-    const xs = [0], cols = [];
-    for (const [r, col] of rl) { if (r - xs[xs.length - 1] > 1) { xs.push(r); cols.push(col); } else if (xs.length === 1) { cols.push(col); xs.push(r + 0.0001); } }
-    if (L - xs[xs.length - 1] > 1) { xs.push(L); cols.push(g.items[g.items.length - 1].col); }
-    /* altura (em degraus) que os textos vão ocupar */
-    const tmp = hChainLevels(c, xs, fs);
-    const floorY = v.Y(0), topY = v.Y(c.H || 1e9);
-    let off = half + 12 * K, dir = -1, ok = false;
-    for (let guard = 0; guard < 60 && !ok; guard++) {
-      const lineY = g.cy - dir * off;
-      const y0 = dir < 0 ? lineY - 9 * K : lineY - (11 + tmp * 9) * K, y1 = dir < 0 ? lineY + (11 + tmp * 9) * K : lineY + 9 * K;
-      if (dir < 0 && y1 > floorY - 2 * K) { dir = 1; off = half + 12 * K; continue; }
-      if (![...bands, ...used].some(b => y0 < b[1] && b[0] < y1)) { used.push([y0, y1]); ok = true; } else off += 10 * K;
+  const floorY = v.Y(0);
+  const tH = fs * 1.5 + 2 * K;
+  for (const i of info.slice().sort((a, b) => b.cz - a.cz)) {
+    const z = i.it.type === 'coringa' ? i.it.z : zc(i.it);
+    const spans = [[0, i.refs[0]], [i.refs[i.refs.length - 1], L]];
+    for (const [a, b] of spans) {
+      if (b - a < 1) continue;
+      const txt = fmt(b - a), tw = textW(txt, fs, { font: 'mono' }) + 6 * K;
+      const xa = v.X(a), xb = v.X(b), mid = (xa + xb) / 2, hw = Math.max(Math.abs(xb - xa), tw) / 2;
+      let pick = 0;
+      for (let k = 0; k < 40; k++) {
+        const off = k === 0 ? 0 : (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 11;
+        const yb = v.Y(z) - off * K, y0 = yb - tH, y1 = yb + 3 * K;
+        if (y1 > floorY - 1 * K) continue;
+        const clash = used.some(q => mid - hw < q[1] && q[0] < mid + hw && y0 < q[3] && q[2] < y1)
+          || gl.some(q => q.i !== i && Math.min(xa, xb) < q.x1 && q.x0 < Math.max(xa, xb) && y0 < q.y1 && q.y0 < y1);
+        if (!clash) { pick = off; used.push([mid - hw, mid + hw, y0, y1]); break; }
+        if (k === 39) { pick = off; used.push([mid - hw, mid + hw, y0, y1]); }
+      }
+      dimLine(c, [a, z], [b, z], [0, 1], pick, txt, { color: i.col, tcolor: i.col, size: 7.2 });
     }
-    hChain(c, xs, g.cz, dir, off / K, cols, { size: 7.2 });
   }
   /* alturas: do piso até o ponto (até a base, no dreno) */
   const cols2 = info.slice().sort((a, b) => a.it.u - b.it.u);
@@ -609,11 +664,6 @@ function drawWall(c, room, wi, o) {
     const ch = chainSegs(room, wi);
     for (const s of ch.segs) dimLine(c, [s.a, H], [s.b, H], up, off, fmt(s.b - s.a), { src: s.src });
     off += 15;
-  }
-  if (pts.length && pts.length <= 10 && !o.ptDims) {
-    const xs = [0, ...pts.flatMap(p => p.type === 'coringa' ? [p.u - p.w / 2, p.u + p.w / 2] : [p.u]), L].sort((a, b) => a - b);
-    const lv = hChain(c, xs, H, 1, off, [P.mut], { size: 7.6 });
-    off += 15 + lv * 8.5;
   }
   dimLine(c, [0, H], [L, H], up, off, fmt(L), { src: room.wsrc[wi], bold: true });
   dimLine(c, [0, 0], [0, H], [-1, 0], 14, fmt(H), { src: room.Hsrc, bold: true });

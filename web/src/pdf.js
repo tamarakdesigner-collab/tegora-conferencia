@@ -148,40 +148,35 @@ function pdfCeilPage(doc, ctx, room, total) {
   pdfLegend(G, sx, y + 60);
 }
 
-function pdfWallPage(doc, ctx, room, wi, total) {
-  const g = wallGeom(room, wi);
-  const G = pdfFrame(doc, ctx, 'Parede ' + wnum(room, wi) + ' · ' + room.name, 'Vista frontal · comprimento ' + fmt(g.L, ctx.unit, true) + ' · pé-direito ' + fmt(room.H, ctx.unit, true), ctx.pg(), total);
-  const P = PAL_PRINT;
-  const items = itemsOn(room, wi);
-  const lab = labelsFor(room);
-  const nRows = items.length;
-  const tblH = Math.min(nRows, 12) * 12 + 40;
-  const area = { x: PM, y: PM + 38, w: PW - 2 * PM, h: PH - 2 * PM - 48 - (nRows ? tblH + 6 : 0) };
-  const v = View.fit({ x0: 0, y0: 0, x1: g.L, y1: room.H + wallTopExtra(room) }, area, 0);
-  /* margens para as cotas: reduz a escala */
-  const padL = 46, padT = 62, padR = 56, padB = 22;
-  const box = { x: area.x + padL, y: area.y + padT, w: area.w - padL - padR - 112, h: area.h - padT - padB };
+/* duas vistas de parede por página, lado a lado */
+function pdfWallCol(G, room, wi, x0, cw, y0, ch) {
+  const g = wallGeom(room, wi), P = PAL_PRINT, items = itemsOn(room, wi), lab = labelsFor(room);
+  G.text(x0, y0 + 6, 'PAREDE ' + wnum(room, wi), { size: 9.5, bold: true, anchor: 'start', fill: P.ink });
+  G.text(x0 + cw, y0 + 6, fmt(g.L, UNIT, true) + ' × ' + fmt(room.H, UNIT, true), { size: 7.4, anchor: 'end', fill: P.mut });
+  G.line(x0, y0 + 11, x0 + cw, y0 + 11, { stroke: P.faint, w: 0.6 });
+  const maxRows = 7, nRows = Math.min(items.length, maxRows), tblH = nRows ? (nRows + 1) * 11 + (items.length > maxRows ? 10 : 0) + 8 : 0;
+  const box = { x: x0 + 34, y: y0 + 16 + 58, w: cw - 34 - 30, h: ch - 16 - 58 - 14 - tblH };
   const vv = View.fit({ x0: 0, y0: 0, x1: g.L, y1: room.H + wallTopExtra(room) }, box, 0);
   drawWall({ G, v: vv, K: 1, P, hit: false }, room, wi, { allDims: true, ptDims: true });
-  /* miniatura */
-  const mw = 100, mh = 80, mx = PW - PM - mw, my = area.y + 4;
-  G.text(mx, my, 'POSIÇÃO NA PLANTA', { size: 6.5, bold: true, anchor: 'start', fill: P.accent });
-  const mv = View.fit(bbox(room.pts), { x: mx, y: my + 6, w: mw, h: mh }, 6);
-  drawMini({ G, v: mv, K: 1, P, hit: false }, room, wi);
-  G.text(mx, my + mh + 16, 'Seta: sentido da vista', { size: 6.3, anchor: 'start', fill: P.mut });
-  /* tabela */
   if (nRows) {
-    const ty = PH - PM - 4 - tblH + 6;
-    const cols = [{ h: 'Id', w: 30 }, { h: 'Item', w: 190 }, { h: 'Cat.', w: 80 }, { h: 'Dist. esq.', w: 70, a: 'r' }, { h: 'Dist. dir.', w: 70, a: 'r' }, { h: 'Altura (z)', w: 70, a: 'r' }, { h: 'L × A', w: 90, a: 'r' }, { h: 'Origem', w: 70 }];
-    const rows = items.slice(0, 12).map(it => {
+    const ty = y0 + ch - tblH + 4;
+    const cols = [{ h: 'Id', w: 22 }, { h: 'Item', w: cw - 22 - 38 - 44 - 44 - 44 - 56 }, { h: 'Cat.', w: 38 }, { h: 'Esq.', w: 44, a: 'r' }, { h: 'Dir.', w: 44, a: 'r' }, { h: 'Altura', w: 44, a: 'r' }, { h: 'L × A', w: 56, a: 'r' }];
+    const rows = items.slice(0, maxRows).map(it => {
       const tid = it.kind === 'op' ? lab.tags[it.id] : String(lab.nums[it.id]);
       const left = it.kind === 'op' ? it.u : it.u - it.w / 2, right = g.L - (it.kind === 'op' ? it.u + it.w : it.u + it.w / 2);
       const cat = CATS.find(c => c.id === LIBMAP[it.type].cat).short;
-      return [tid, it.name, cat, fmt(left), fmt(right), it.kind === 'op' ? (it.z ? fmt(it.z) : 'piso') : fmt(it.z), fmt(it.w) + '×' + fmt(it.h), SRC_TXT[it.src] || 'manual'];
+      return [tid, it.name, cat.slice(0, 5), fmt(left), fmt(right), it.kind === 'op' ? (it.z ? fmt(it.z) : 'piso') : fmt(it.z), fmt(it.w) + '×' + fmt(it.h)];
     });
-    pdfTable(G, PM, ty, cols, rows, { rh: 12, fs: 7 });
-    if (nRows > 12) G.text(PM, ty + 12 * 13 + 8, '+ ' + (nRows - 12) + ' itens não listados.', { size: 6.5, anchor: 'start', fill: P.mut });
+    pdfTable(G, x0, ty, cols, rows, { rh: 11, fs: 6.6 });
+    if (items.length > maxRows) G.text(x0, ty + (nRows + 1) * 11 + 6, '+ ' + (items.length - maxRows) + ' itens não listados.', { size: 6.3, anchor: 'start', fill: P.mut });
   }
+}
+function pdfWallPage(doc, ctx, room, wi, wj, total) {
+  const ws = wj == null ? [wi] : [wi, wj];
+  const G = pdfFrame(doc, ctx, 'Parede ' + ws.map(w => wnum(room, w)).join(' e ') + ' · ' + room.name, 'Vistas frontais · pé-direito ' + fmt(room.H, ctx.unit, true), ctx.pg(), total);
+  const gap = 18, cw = (PW - 2 * PM - gap) / 2, y0 = PM + 38, ch = PH - 2 * PM - 48;
+  ws.forEach((w, k) => pdfWallCol(G, room, w, PM + k * (cw + gap), cw, y0, ch));
+  if (ws.length === 2) G.line(PM + cw + gap / 2, y0, PM + cw + gap / 2, y0 + ch, { stroke: PAL_PRINT.faint, w: 0.5 });
 }
 
 function pdfPhotoPage(doc, ctx, room, ph, idx, total) {
@@ -213,7 +208,8 @@ function buildPdf(state, photoBytes) {
     if (hasWalls(r)) {
       pages.push(['plan', ri]);
       if (r.ceil.length || (r.beams || []).length) pages.push(['ceil', ri]);
-      wallOrder(r).forEach(wi => pages.push(['wall', ri, wi]));
+      const wo = wallOrder(r);
+      for (let k = 0; k < wo.length; k += 2) pages.push(['wall', ri, wo[k], wo[k + 1]]);
     }
     (r.photos || []).forEach((p, k) => pages.push(['photo', ri, k]));
   });
@@ -224,7 +220,7 @@ function buildPdf(state, photoBytes) {
     const r = state.rooms[p[1]];
     if (p[0] === 'plan') pdfPlanPage(doc, ctx, r, p[1], total);
     else if (p[0] === 'ceil') pdfCeilPage(doc, ctx, r, total);
-    else if (p[0] === 'wall') pdfWallPage(doc, ctx, r, p[2], total);
+    else if (p[0] === 'wall') pdfWallPage(doc, ctx, r, p[2], p[3], total);
     else pdfPhotoPage(doc, ctx, r, r.photos[p[2]], p[2], total);
   }
   setUnit(saved);
