@@ -244,11 +244,14 @@ function ceilEditor(el, room) {
   const b = bbox(room.pts), d = { id: el.id };
   const base = ceilBase(room, el), nE = base.length;
   let h = `<h3>${eh(el.name)}</h3><div class="card"><div class="row">${fld('Nome', el.name, 'cName', d, { txt: true })}</div><div class="row" style="margin-top:8px">`;
-  h += fld(el.sanca ? 'Profundidade da sanca' : 'Rebaixo (da laje)', el.drop, 'cDrop', d, { meas: true });
-  h += sel('Acabamento', 'cTrim', [['none', 'Sem acabamento'], ['roda', 'Rodaforro'], ['neg', 'Negativo']], el.trim, d);
+  if (!el.sanca) {
+    h += fld('Rebaixo (da laje)', el.drop, 'cDrop', d, { meas: true });
+    h += sel('Acabamento', 'cTrim', [['none', 'Sem acabamento'], ['roda', 'Rodaforro'], ['neg', 'Negativo']], el.trim, d);
+  } else h += `<span class="muted small">Sanca acima do pé-direito do ambiente (${fmt(room.H, UNIT, true)}).</span>`;
   h += '</div>';
   if (el.trim === 'roda') h += `<div class="row" style="margin-top:8px">${fld('Rodaforro: espessura', el.tw, 'cTw', d, { meas: true })}${fld('Rodaforro: altura', el.th, 'cTh', d, { meas: true })}</div>`;
-  if (el.trim === 'neg') h += `<div class="row" style="margin-top:8px">${fld('Negativo: espessura', el.tw, 'cTw', d, { meas: true })}${fld('Pé-direito do negativo', negH(room, el), 'cNh', d, { meas: true })}</div><p class="muted small" style="margin:4px 0 0">O negativo sobe acima do forro até este pé-direito (maior que o normal, ${fmt(room.H, UNIT, true)}).</p>`;
+  if (el.sanca) h += `<div class="row" style="margin-top:8px">${fld('Pé-direito da sanca', negH(room, el), 'cNh', d, { meas: true })}${fld('Espessura da borda', el.tw, 'cTw', d, { meas: true })}</div><p class="muted small" style="margin:4px 0 0">A sanca é desenhada acima do pé-direito, subindo até este valor (maior que ${fmt(room.H, UNIT, true)}).</p>`;
+  else if (el.trim === 'neg') h += `<div class="row" style="margin-top:8px">${fld('Negativo: espessura', el.tw, 'cTw', d, { meas: true })}${fld('Pé-direito do negativo', negH(room, el), 'cNh', d, { meas: true })}</div><p class="muted small" style="margin:4px 0 0">O negativo sobe acima do forro até este pé-direito (maior que o normal, ${fmt(room.H, UNIT, true)}).</p>`;
   if (el.kind === 'rect') {
     h += `<div class="row" style="margin-top:8px">${fld('A partir da parede esq.', el.x - b.x0, 'cX', d, { meas: true })}${fld('A partir da parede inferior', el.y - b.y0, 'cY', d, { meas: true })}</div>`;
     h += `<div class="row" style="margin-top:8px">${fld('A partir da parede dir.', b.x1 - (el.x + el.w), 'cXr', d, { meas: true })}${fld('A partir da parede superior', b.y1 - (el.y + el.h), 'cYt', d, { meas: true })}</div>`;
@@ -258,7 +261,7 @@ function ceilEditor(el, room) {
   h += `<details${eo.some(q => q) ? ' open' : ''}><summary>Editar arestas (simular sanca)</summary><p class="muted small" style="margin:2px 0 8px">Recue cada aresta do forro para dentro. O vão entre a parede e o forro forma a sanca. Os números aparecem na planta quando o forro está selecionado.</p><div class="row">`;
   for (let k = 0; k < nE; k++) h += fld('Aresta ' + (el.kind === 'room' ? 'da parede ' + wnum(room, k) : k + 1), eo[k] || 0, 'cEo', Object.assign({ k }, d), { meas: true });
   h += `</div><div class="row" style="margin-top:8px"><button class="btn sec sm" data-act="cEoReset" data-id="${el.id}">Zerar arestas</button></div></details>`;
-  h += `<p class="muted small" style="margin:8px 0 0">Altura do forro: ${fmt(room.H - el.drop, UNIT, true)}</p>`;
+  if (!el.sanca) h += `<p class="muted small" style="margin:8px 0 0">Altura do forro: ${fmt(room.H - el.drop, UNIT, true)}</p>`;
   h += `<div class="row" style="margin-top:8px"><button class="btn dng sm" data-act="cDel">Excluir</button></div></div>`;
   return h;
 }
@@ -267,8 +270,8 @@ function beamEditor(b, room) {
   const lowRef = b.o === 'h' ? 'da parede inferior' : 'da parede esquerda', hiRef = b.o === 'h' ? 'da parede superior' : 'da parede direita';
   const lo = b.c0 - (b.o === 'h' ? bb.y0 : bb.x0), hi = (b.o === 'h' ? bb.y1 : bb.x1) - (b.c0 + b.t);
   let h = `<h3>${eh(b.name)}</h3><div class="card"><div class="row">${fld('Nome', b.name, 'bName', d, { txt: true })}</div>`;
-  h += `<div class="row" style="margin-top:8px">${fld('Espessura', b.t, 'bT', d, { meas: true })}${fld('Altura da viga', b.h, 'bH', d, { meas: true })}</div>`;
-  h += `<div class="row" style="margin-top:8px">${fld('Altura do piso até a viga', b.z, 'bZ', d, { meas: true })}<div class="small muted" style="align-self:end">Topo a ${fmt(room.H - b.z - b.h)} da laje</div></div>`;
+  h += `<div class="row" style="margin-top:8px">${fld('Espessura', b.t, 'bT', d, { meas: true })}${fld('Pé-direito da viga (piso até a face de baixo)', b.z, 'bZ', d, { meas: true })}</div>`;
+  h += `<p class="muted small" style="margin:6px 0 0">Altura da viga (automática): <b>${fmt(room.H - b.z, UNIT, true)}</b> = pé-direito do ambiente ${fmt(room.H, UNIT, true)} − pé-direito da viga ${fmt(b.z, UNIT, true)}.</p>`;
   h += `<div class="row" style="margin-top:8px">${fld('Borda ' + lowRef, lo, 'bPos', d, { meas: true })}${fld('Borda ' + hiRef, hi, 'bPosHi', d, { meas: true })}</div>`;
   h += `<p class="muted small" style="margin:6px 0 0">Comprimento entre paredes: ${fmt(b.s1 - b.s0)}. As pontas encaixam nas paredes quando a posição muda.</p>`;
   h += `<div class="row" style="margin-top:8px"><button class="btn dng sm" data-act="bDel">Excluir viga</button></div></div>`;
@@ -282,8 +285,8 @@ function panelCeil() {
   if (!hasRoom) h += `<div class="row" style="margin-bottom:8px"><button class="btn" data-act="cNewRoom">Gerar forro automático (padrão da planta)</button></div>`;
   h += `<div class="row"><button class="btn sec sm" data-act="cNewSanca">+ Sanca por medidas</button><button class="btn sm ${UI.tool === 'beam' ? '' : 'sec'}" data-act="bFree">${UI.tool === 'beam' ? '✓ Riscando viga — toque para sair' : 'Viga à mão livre'}</button></div>`;
   h += `<h3>Elementos</h3>`;
-  h += room.ceil.length ? `<div class="list">${room.ceil.map(e => `<button data-act="cSel" data-id="${e.id}" aria-pressed="${e.id === UI.selCeil}"><span>${eh(e.name)}</span><span class="m">${e.sanca ? 'sanca ' + fmt(e.drop) : e.drop ? 'rebaixo ' + fmt(e.drop) : 'rente à laje'}</span></button>`).join('')}</div>` : '<p class="muted small">Nenhum elemento de forro ainda.</p>';
-  if ((room.beams || []).length) h += `<h3>Vigas</h3><div class="list">${room.beams.map(b => `<button data-act="bSel" data-id="${b.id}" aria-pressed="${b.id === UI.selBeam}"><span>${eh(b.name)}</span><span class="m">${fmt(b.s1 - b.s0)} · ${fmt(b.t)} × ${fmt(b.h)}</span></button>`).join('')}</div>`;
+  h += room.ceil.length ? `<div class="list">${room.ceil.map(e => `<button data-act="cSel" data-id="${e.id}" aria-pressed="${e.id === UI.selCeil}"><span>${eh(e.name)}</span><span class="m">${e.sanca ? 'PD ' + fmt(negH(room, e)) : e.drop ? 'rebaixo ' + fmt(e.drop) : 'rente à laje'}</span></button>`).join('')}</div>` : '<p class="muted small">Nenhum elemento de forro ainda.</p>';
+  if ((room.beams || []).length) h += `<h3>Vigas</h3><div class="list">${room.beams.map(b => `<button data-act="bSel" data-id="${b.id}" aria-pressed="${b.id === UI.selBeam}"><span>${eh(b.name)}</span><span class="m">${fmt(b.s1 - b.s0)} · ${fmt(b.t)} × ${fmt(R().H - b.z)}</span></button>`).join('')}</div>`;
   { const bm = (room.beams || []).find(b => b.id === UI.selBeam); if (bm) h += beamEditor(bm, room); }
   const el = room.ceil.find(e => e.id === UI.selCeil);
   if (el) h += ceilEditor(el, room);
@@ -782,7 +785,7 @@ const A = {
     tryMut(() => {
       const room = R(), b = bbox(room.pts), n = room.ceil.filter(q => q.sanca).length + 1;
       let w = Math.min(1500, b.w / 2), h = Math.min(1000, b.h / 2);
-      const e = newCeil('rect', room, { sanca: true, name: 'Sanca ' + n, drop: 150, trim: 'neg', tw: 60, nh: room.H + 100, w, h, x: b.x0 + (b.w - w) / 2, y: b.y0 + (b.h - h) / 2 });
+      const e = newCeil('rect', room, { sanca: true, name: 'Sanca ' + n, drop: 0, trim: 'neg', tw: 60, nh: room.H + 150, w, h, x: b.x0 + (b.w - w) / 2, y: b.y0 + (b.h - h) / 2 });
       for (let k = 0; k < 8 && !rectInsideRoom(e.x, e.y, e.w, e.h, room.pts); k++) { e.w = Math.max(200, e.w * 0.7); e.h = Math.max(200, e.h * 0.7); e.x = b.x0 + (b.w - e.w) / 2; e.y = b.y0 + (b.h - e.h) / 2; }
       if (!rectInsideRoom(e.x, e.y, e.w, e.h, room.pts)) return { ok: false, msg: 'Não coube uma sanca no centro. Ajuste o ambiente.' };
       room.ceil.push(e); UI.selCeil = e.id; UI.selBeam = null; UI.tool = null;
@@ -793,8 +796,7 @@ const A = {
   _bEdit(el, fn, min) { const v = num(el, min == null ? 0 : min); if (v == null) return; const bm = R().beams.find(x => x.id === el.dataset.id); if (!bm) return; tryMut(() => { const old = JSON.stringify(bm); fn(bm, v); beamResnap(R(), bm); if (!beamInsideRoom(R(), bm)) { Object.assign(bm, JSON.parse(old)); return { ok: false, msg: 'A viga precisa ficar dentro das paredes do ambiente.' }; } }); },
   bName(el) { const bm = R().beams.find(x => x.id === el.dataset.id); tryMut(() => { bm.name = el.value.trim() || bm.name; }); },
   bT(el) { A._bEdit(el, (b, v) => { b.t = v; }, 20); },
-  bH(el) { const v = num(el, 20); if (v == null) return; const bm = R().beams.find(x => x.id === el.dataset.id); tryMut(() => { if (bm.z + v > R().H + 0.5) return { ok: false, msg: 'A viga passaria do pé-direito.' }; bm.h = v; }); },
-  bZ(el) { const v = num(el, 0); if (v == null) return; const bm = R().beams.find(x => x.id === el.dataset.id); tryMut(() => { if (v + bm.h > R().H + 0.5) return { ok: false, msg: 'A viga passaria do pé-direito.' }; bm.z = v; }); },
+  bZ(el) { const v = num(el, 0); if (v == null) return; const bm = R().beams.find(x => x.id === el.dataset.id); tryMut(() => { if (v > R().H - 20) return { ok: false, msg: 'O pé-direito da viga precisa ser menor que o pé-direito do ambiente (' + fmt(R().H) + ').' }; bm.z = v; bm.h = R().H - v; }); },
   bPos(el) { const bb = bbox(R().pts); A._bEdit(el, (b, v) => { b.c0 = (b.o === 'h' ? bb.y0 : bb.x0) + v; }); },
   bPosHi(el) { const bb = bbox(R().pts); A._bEdit(el, (b, v) => { b.c0 = (b.o === 'h' ? bb.y1 : bb.x1) - v - b.t; }); },
   bDel() { const id = UI.selBeam; tryMut(() => { R().beams = R().beams.filter(x => x.id !== id); UI.selBeam = null; }); },

@@ -602,8 +602,8 @@ function drawWall(c, room, wi, o) {
     if (us.length < 2) continue;
     const u0 = Math.max(0, Math.min(...us)), u1 = Math.min(g.L, Math.max(...us));
     if (u1 - u0 < 1) continue;
-    G.rect(v.X(u0), v.Y(bm.z + bm.h), (u1 - u0) * v.s, bm.h * v.s, { fill: P.paper, stroke: P.ink, w: 1.1 * K, dash: [5 * K, 3 * K] });
-    G.text(v.X((u0 + u1) / 2), v.Y(bm.z + bm.h / 2), bm.name + ' · ' + fmt(bm.h), { size: 7 * K, font: 'mono', fill: P.mut });
+    G.rect(v.X(u0), v.Y(room.H), (u1 - u0) * v.s, (room.H - bm.z) * v.s, { fill: P.paper, stroke: P.ink, w: 1.1 * K, dash: [5 * K, 3 * K] });
+    G.text(v.X((u0 + u1) / 2), v.Y((room.H + bm.z) / 2), bm.name + ' · h ' + fmt(room.H - bm.z), { size: 7 * K, font: 'mono', fill: P.mut });
   }
   /* chão */
   G.line(X0 - 14 * K, YB, X1 + 14 * K, YB, { stroke: P.ink, w: 2 * K });

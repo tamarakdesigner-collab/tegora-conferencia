@@ -133,8 +133,8 @@ function pdfCeilPage(doc, ctx, room, total) {
   let y = PM + 44;
   G.text(sx, y, 'ELEMENTOS DO FORRO', { size: 7, bold: true, anchor: 'start', fill: P.accent });
   y += 8;
-  const rows = room.ceil.map(e => [e.name + (e.sanca ? ' (sanca)' : '') + (e.eo && e.eo.some(q => q) ? ' *' : ''), e.drop ? fmt(e.drop) : 'rente', e.trim === 'roda' ? 'Roda ' + fmt(e.tw) + '×' + fmt(e.th) : e.trim === 'neg' ? 'Neg. e' + fmt(e.tw) + ' PD ' + fmt(negH(room, e)) : '—']);
-  for (const b of (room.beams || [])) rows.push([b.name + ' (viga)', 'z ' + fmt(b.z), fmt(b.t) + ' × ' + fmt(b.h) + ' · ' + fmt(b.s1 - b.s0)]);
+  const rows = room.ceil.map(e => [e.name + (e.sanca ? ' (sanca)' : '') + (e.eo && e.eo.some(q => q) ? ' *' : ''), e.sanca ? 'PD ' + fmt(negH(room, e)) : e.drop ? fmt(e.drop) : 'rente', e.trim === 'roda' ? 'Roda ' + fmt(e.tw) + '×' + fmt(e.th) : e.trim === 'neg' ? 'Neg. e' + fmt(e.tw) + ' PD ' + fmt(negH(room, e)) : '—']);
+  for (const b of (room.beams || [])) rows.push([b.name + ' (viga)', 'PD ' + fmt(b.z), fmt(b.t) + ' × h ' + fmt(room.H - b.z) + ' · ' + fmt(b.s1 - b.s0)]);
   y = pdfTable(G, sx, y, [{ h: 'Elemento', w: sw - 62 - 78 }, { h: 'Rebaixo', w: 62, a: 'r' }, { h: 'Acabamento', w: 78 }], rows, { rh: 13, fs: 7 });
   y += 14;
   const lines = [
@@ -155,7 +155,11 @@ function pdfWallCol(G, room, wi, x0, cw, y0, ch) {
   G.text(x0 + cw, y0 + 6, fmt(g.L, UNIT, true) + ' × ' + fmt(room.H, UNIT, true), { size: 7.4, anchor: 'end', fill: P.mut });
   G.line(x0, y0 + 11, x0 + cw, y0 + 11, { stroke: P.faint, w: 0.6 });
   const maxRows = 7, nRows = Math.min(items.length, maxRows), tblH = nRows ? (nRows + 1) * 11 + (items.length > maxRows ? 10 : 0) + 8 : 0;
-  const box = { x: x0 + 34, y: y0 + 16 + 58, w: cw - 34 - 30, h: ch - 16 - 58 - 14 - tblH };
+  const mw = 70, mh = 52;
+  drawMini({ G, v: View.fit(bbox(room.pts), { x: x0 + cw - mw, y: y0 + 15, w: mw, h: mh }, 3), K: 1, P, hit: false }, room, wi);
+  G.text(x0 + cw - mw - 4, y0 + 22, 'PLANTA CHAVE', { size: 5.8, bold: true, anchor: 'end', fill: P.accent });
+  G.text(x0 + cw - mw - 4, y0 + 30, 'seta: sentido da vista', { size: 5.5, anchor: 'end', fill: P.mut });
+  const box = { x: x0 + 34, y: y0 + 16 + 70, w: cw - 34 - 30, h: ch - 16 - 70 - 14 - tblH };
   const vv = View.fit({ x0: 0, y0: 0, x1: g.L, y1: room.H + wallTopExtra(room) }, box, 0);
   drawWall({ G, v: vv, K: 1, P, hit: false }, room, wi, { allDims: true, ptDims: true });
   if (nRows) {
