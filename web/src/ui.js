@@ -40,10 +40,12 @@ function loadLocal() {
 }
 function pushUndo(snap) { undoStack.push(snap || JSON.stringify(S)); if (undoStack.length > 40) undoStack.shift(); }
 function tryMut(fn, o) {
+  if (UI.view === 'work' && S.cc != null && CL() && R() && R().locked && !(o && o.force)) { UI.lastOk = false; toast('Ambiente bloqueado. Desbloqueie para editar.'); renderAll(); return false; }
   const snap = JSON.stringify(S);
   let r;
   try { r = fn(); } catch (e) { r = { ok: false, msg: 'Não foi possível aplicar essa alteração.' }; }
-  if (r && r.ok === false) { S = JSON.parse(snap); toast(r.msg || 'Alteração não aplicada.'); renderAll(); return false; }
+  if (r && r.ok === false) { UI.lastOk = false; S = JSON.parse(snap); toast(r.msg || 'Alteração não aplicada.'); renderAll(); return false; }
+  UI.lastOk = true;
   pushUndo(snap); persist(); (o && o.stage) ? renderStage() : renderAll();
   return true;
 }
@@ -54,12 +56,19 @@ function doUndo() {
 }
 
 /* ---------- campos ---------- */
+const LKG = { itUR: 'itUL' };
+const lkKey = (act, data) => (LKG[act] || act) + '|' + Object.entries(data || {}).map(([k, v]) => k + '=' + v).join(',');
+const PADLOCK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2zm-7-2a2 2 0 0 1 4 0v2h-4V7z"/></svg>';
 function fld(label, mm, act, data, o) {
   o = o || {};
   const id = 'f' + (++fid);
+  const rm = (S.cc != null && UI.view === 'work' && CL() && R()) ? R() : null;
+  const key = (o.meas && !o.txt && act !== 'noop' && rm) ? lkKey(act, data) : null;
+  const locked = !!(key && rm.lk && rm.lk[key]), rlock = !!(rm && rm.locked);
+  const ro = (locked || rlock) ? ' readonly' : '';
   const da = Object.entries(data || {}).map(([k, v]) => ` data-${k}="${eh(v)}"`).join('');
   const val = o.txt ? eh(mm) : inv(mm);
-  return `<label class="fld"><span>${label}${o.badge ? ' ' + o.badge : ''}</span><div class="in"><input id="${id}" ${o.txt ? 'type="text" class="txt"' : 'type="text" inputmode="decimal" autocomplete="off"'} value="${val}" data-act="${act}"${da}>${o.meas ? `<button type="button" class="meas" data-act="meas" data-t="${id}" title="Leitura simulada da trena GLM 50 C">Medir</button>` : ''}</div></label>`;
+  return `<label class="fld"><span>${label}${o.badge ? ' ' + o.badge : ''}</span><div class="in"><input id="${id}" ${o.txt ? 'type="text" class="txt"' : 'type="text" inputmode="decimal" autocomplete="off"'} value="${val}" data-act="${act}"${da}${ro}${key ? ` data-lk="${eh(key)}"` : ''}>${locked ? `<button type="button" class="lk" data-act="unlock" data-k="${eh(key)}" title="Medida travada. Toque no cadeado para editar" aria-label="Destravar medida">${PADLOCK}</button>` : (o.meas && !rlock ? `<button type="button" class="meas" data-act="meas" data-t="${id}" title="Leitura simulada da trena GLM 50 C">Medir</button>` : '')}</div></label>`;
 }
 function sel(label, act, opts, cur, data) {
   const da = Object.entries(data || {}).map(([k, v]) => ` data-${k}="${eh(v)}"`).join('');
@@ -332,6 +341,7 @@ function renderPanel() {
   const p = $('#panel');
   const keep = p.scrollTop;
   let h = UI.addRoom ? roomForm() : '';
+  if (R().locked) h += `<div class="card" style="display:flex;gap:10px;align-items:center"><span style="flex:1">${PADLOCK} Ambiente bloqueado: só visualização e exportação.</span><button class="btn sm" data-act="rmUnlockHere">Desbloquear</button></div>`;
   h += ({ plan: panelPlan, walls: panelWalls, ceil: panelCeil, photos: panelPhotos, export: panelExport })[UI.tab]();
   p.innerHTML = '<div class="gut">' + h + '</div>';
   p.scrollTop = keep;
@@ -586,11 +596,19 @@ function renderHome() {
     h += `<h2>${eh(c.nome || 'Cliente')}</h2>`;
     h += `<h3>Dados do cliente</h3><div class="card"><div class="row">${ftext('nome', 'Nome', c.nome, 'cf')}${ftext('endereco', 'Endereço', c.endereco, 'cf')}</div><div class="row" style="margin-top:8px">${ftext('loja', 'Loja', c.loja, 'cf')}${ftext('consultor', 'Consultor de vendas', c.consultor, 'cf')}${ftext('arquiteto', 'Arquiteto', c.arquiteto, 'cf')}</div><div class="row" style="margin-top:8px"><label class="fld"><span>Observações</span><textarea class="txt" rows="3" data-act="cf" data-k="obs">${eh(c.obs || '')}</textarea></label></div></div>`;
     h += `<h3>Ambientes a medir</h3>`;
-    h += c.rooms.length ? `<div class="list">${c.rooms.map((r, i) => `<button data-act="roomOpen" data-i="${i}" style="flex-direction:column;gap:2px"><b style="font-size:15px">${eh(r.name)}</b><span class="m">${roomStat(r)}</span></button>`).join('')}</div>` : '<p class="muted small">Nenhum ambiente ainda. Crie abaixo.</p>';
+    h += c.rooms.length ? `<div class="list">${c.rooms.map((r, i) => `<button data-act="roomOpen" data-i="${i}" style="flex-direction:column;gap:2px"><b style="font-size:15px">${r.locked ? PADLOCK + ' ' : ''}${eh(r.name)}</b><span class="m">${roomStat(r)}</span></button>`).join('')}</div><p class="muted small" style="margin:6px 0 0">Segure um ambiente para excluir ou bloquear.</p>` : '<p class="muted small">Nenhum ambiente ainda. Crie abaixo.</p>';
     h += `<div class="card" data-form="rooms" style="margin-top:10px"><h3 style="margin-top:0">Criar ambientes</h3><label class="fld"><span>Nomes (separe por vírgula ou linha)</span><textarea class="txt" rows="2" data-f="names" data-act="noop" id="roomNames" placeholder="Sala, Cozinha, Banheiro, Dormitório"></textarea></label><div class="cats" style="margin-top:8px">${ROOM_SUGG.map(n => `<button class="chip" data-act="roomSugg" data-n="${eh(n)}">${eh(n)}</button>`).join('')}</div><div class="row" style="margin-top:8px"><button class="btn" data-act="roomsCreate">Criar ambientes</button></div><p class="muted small" style="margin:8px 0 0">Cada ambiente nasce vazio (pé-direito 2.700 mm): na hora da medição você desenha o contorno com o dedo e informa as medidas.</p></div>`;
     if (UI.lastFile) h += `<div class="card"><div class="row"><span class="small" style="flex:1;min-width:0;overflow-wrap:anywhere">Pronto: <b>${eh(UI.lastFile.name)}</b></span><button class="btn" data-act="enviar">Enviar</button></div></div>`;
     h += `<h3>Exportar</h3><div class="card"><div class="row"><button class="btn" data-act="expPdf" data-v="all">PDF do cliente (${pagesOf(c.rooms)} pág.)</button><button class="btn sec" data-act="expDxf" data-v="all">DXF (um por ambiente)</button></div></div>`;
     h += `<div class="row" style="margin-top:14px"><button class="btn dng sm" data-act="clientDel">${UI.confirm === 'clientDel' ? 'Confirmar: excluir cliente e ambientes?' : 'Excluir cliente'}</button></div>`;
+  }
+  if (UI.rmenu && S.cc != null && CL().rooms[UI.rmenu.i]) {
+    const r = CL().rooms[UI.rmenu.i], m = UI.rmenu;
+    let b;
+    if (m.step === 1) b = `<h3 style="margin:0 0 6px">Excluir “${eh(r.name)}”?</h3><p class="small">Paredes, itens, forro e fotos deste ambiente serão apagados.</p><div class="row"><button class="btn dng" data-act="rmDel2">Continuar</button><button class="btn sec" data-act="rmClose">Cancelar</button></div>`;
+    else if (m.step === 2) b = `<h3 style="margin:0 0 6px">Última confirmação</h3><p class="small">Excluir <b>${eh(r.name)}</b> de vez? Não há como desfazer.</p><div class="row"><button class="btn dng" data-act="rmDelGo">Excluir definitivamente</button><button class="btn sec" data-act="rmClose">Cancelar</button></div>`;
+    else b = `<h3 style="margin:0 0 10px">${r.locked ? PADLOCK + ' ' : ''}${eh(r.name)}</h3><div class="col">${r.locked ? '<p class="small muted" style="margin:0 0 6px">Ambiente bloqueado: não pode ser editado nem excluído.</p>' : '<button class="btn dng" data-act="rmDel1">Excluir ambiente</button>'}<button class="btn" data-act="rmLock">${r.locked ? 'Desbloquear' : 'Bloquear'}</button><button class="btn sec" data-act="rmClose">Cancelar</button></div>`;
+    h += `<div class="mdl" data-act="rmClose"><div class="mdlb">${b}</div></div>`;
   }
   const keep = el.scrollTop;
   el.innerHTML = '<div class="gut" style="padding-block:12px 28px;max-width:760px;margin:0 auto">' + h + '</div>';
@@ -652,7 +670,9 @@ const A = {
     if (!names.length) { toast('Digite ou toque nos nomes dos ambientes.'); return; }
     tryMut(() => { for (const n of names) CL().rooms.push(newRoom(n, 0, 0, 2700)); });
   },
-  roomOpen(el) { S.cur = +el.dataset.i; S.wall = 0; UI.strokes = []; UI.selCorner = null; UI.sheet = 'min'; UI.tab = 'plan'; UI.view = 'work'; UI.tab = 'plan'; UI.sel = UI.selCeil = UI.selAnn = UI.selDrain = UI.selPhoto = null; UI.uv = null; undoStack = []; persist(); renderAll(); },
+  unlock(el) { const r = R(); if (r.lk) delete r.lk[el.dataset.k]; persist(); renderAll(); },
+  roomOpen(el) {
+    if (UI.lpFlag) { UI.lpFlag = false; return; } S.cur = +el.dataset.i; S.wall = 0; UI.strokes = []; UI.selCorner = null; UI.sheet = 'min'; UI.tab = 'plan'; UI.view = 'work'; UI.tab = 'plan'; UI.sel = UI.selCeil = UI.selAnn = UI.selDrain = UI.selPhoto = null; UI.uv = null; undoStack = []; persist(); renderAll(); },
   traceDone() {
     const pts = [].concat(...UI.strokes);
     const res = traceToPoly(pts);
@@ -700,6 +720,12 @@ const A = {
   roomTw(el) { const v = num(el, 20); if (v == null) return; tryMut(() => { R().tw = v; }); },
   wallT(el) { const v = num(el, 20); if (v == null) return; const i = +el.dataset.i; tryMut(() => { const r = R(); r.wt = r.wt || []; r.wt[i] = v === (r.tw || 120) ? 0 : v; }); },
   roomH(el) { const v = num(el, 1000); if (v == null) return; const src = el.dataset.src || 'manual'; tryMut(() => { R().H = v; R().Hsrc = src; for (const it of R().items) { if (it.kind === 'op') it.h = Math.min(it.h, Math.max(100, v - it.z)); } }); },
+  rmUnlockHere() { R().locked = false; persist(); renderAll(); toast('Ambiente desbloqueado.'); },
+  rmClose(el, e) { if (e && el.classList && el.classList.contains('mdl') && e.target !== el) return; UI.rmenu = null; renderHome(); },
+  rmLock() { const r = CL().rooms[UI.rmenu.i]; r.locked = !r.locked; UI.rmenu = null; persist(); renderHome(); toast(r.locked ? 'Ambiente bloqueado.' : 'Ambiente desbloqueado.'); },
+  rmDel1() { UI.rmenu.step = 1; renderHome(); },
+  rmDel2() { UI.rmenu.step = 2; renderHome(); },
+  rmDelGo() { const c = CL(), i = UI.rmenu.i; if (c.rooms[i] && !c.rooms[i].locked) { c.rooms.splice(i, 1); S.cur = 0; undoStack = []; } UI.rmenu = null; persist(); renderHome(); toast('Ambiente excluído.'); },
   roomDel(el) {
     if (UI.confirm !== 'roomDel') { UI.confirm = 'roomDel'; renderPanel(); return; }
     UI.confirm = null; tryMut(() => { CL().rooms.splice(S.cur, 1); S.cur = 0; S.wall = 0; UI.uv = null; UI.view = 'client'; });
@@ -867,6 +893,20 @@ const A = {
 };
 function resetTo(st) { S = st; setUnit(S.unit || 'mm'); undoStack = []; UI.sel = UI.selCeil = UI.selAnn = UI.selPhoto = UI.selDrain = null; UI.uv = null; UI.view = 'client'; persist(); renderAll(); }
 
+/* segurar um ambiente: abre excluir/bloquear */
+(function () {
+  let t = null, sx = 0, sy = 0;
+  const clear = () => { clearTimeout(t); t = null; };
+  document.addEventListener('pointerdown', e => {
+    const b = e.target.closest && e.target.closest('[data-act=roomOpen]');
+    if (!b) return;
+    sx = e.clientX; sy = e.clientY; clear();
+    t = setTimeout(() => { t = null; UI.lpFlag = true; UI.rmenu = { i: +b.dataset.i, step: 0 }; renderHome(); }, 550);
+  });
+  document.addEventListener('pointermove', e => { if (t && Math.hypot(e.clientX - sx, e.clientY - sy) > 10) clear(); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(n => document.addEventListener(n, clear));
+  document.addEventListener('contextmenu', e => { if (e.target.closest && e.target.closest('[data-act=roomOpen]')) e.preventDefault(); });
+})();
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
   if (!b || b.tagName === 'INPUT' || b.tagName === 'SELECT' || b.closest('#cv')) return;
@@ -879,7 +919,10 @@ document.addEventListener('change', e => {
   if (!el.matches || !el.matches('input[data-act],select[data-act],textarea[data-act]')) return;
   if (el.type === 'file') { if (el.dataset.act === 'phFile') addPhotos(el.files); else if (el.dataset.act === 'impJson') importJson(el.files[0]); el.value = ''; return; }
   const fn = A[el.dataset.act];
+  UI.lastOk = undefined;
   if (fn) fn(el, e);
+  /* medida inserida: trava sozinha (cadeado fechado ao lado) */
+  if (el.dataset.lk && UI.lastOk === true && S.cc != null) { const r = R(); r.lk = r.lk || {}; r.lk[el.dataset.lk] = true; persist(); renderAll(); }
   delete el.dataset.src;
 });
 
@@ -1021,6 +1064,7 @@ function onDown(e) {
   const v = curView(), w = v.inv(px, py);
   drag = { px, py, moved: false, kind: 'pan', id, v0: v, w0: w, snap: null };
   const room = R();
+  if (room.locked) { if (id && /^(c:|r:|i:|f:|b:)/.test(id)) toast('Ambiente bloqueado.'); return; }
   if (UI.tab === 'plan' && !hasWalls(room)) { drag.kind = 'trace'; UI.stroke = [w]; return; }
   if (UI.tab === 'plan' && id && id.startsWith('c:')) {
     UI.selCorner = +id.slice(2); openSheet(); drag.kind = 'corner'; drag.k = UI.selCorner; drag.snap = JSON.stringify(S); drag.room0 = JSON.stringify(room); renderPanel(); renderStage();
@@ -1030,7 +1074,8 @@ function onDown(e) {
   } else if (UI.tab === 'plan' && id && id.startsWith('w:')) drag.kind = 'tapWall';
   else if (UI.tab === 'walls' && id && id.startsWith('i:')) {
     const it = room.items.find(x => x.id === id.slice(2));
-    if (it) { drag.kind = 'item'; drag.it = it; drag.off = [w[0] - it.u, w[1] - zc(it)]; UI.sel = it.id; openSheet(); drag.snap = JSON.stringify(S); drag.moved0 = false; renderPanel(); renderStage(); }
+    if (it && room.lk && (room.lk[lkKey('itUL', { id: it.id })] || room.lk[lkKey('itZ', { id: it.id })])) { UI.sel = it.id; drag.kind = 'tapOnly'; toast('Posição medida e travada. Toque no cadeado para liberar.'); openSheet(); renderPanel(); renderStage(); }
+    else if (it) { drag.kind = 'item'; drag.it = it; drag.off = [w[0] - it.u, w[1] - zc(it)]; UI.sel = it.id; openSheet(); drag.snap = JSON.stringify(S); drag.moved0 = false; renderPanel(); renderStage(); }
   } else if (UI.tab === 'ceil') {
     if (UI.tool === 'beam') { drag.kind = 'btrace'; UI.cstroke = [w]; }
     else if (UI.tool === 'free') { drag.kind = 'ctrace'; UI.cstroke = [w]; }

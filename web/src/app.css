@@ -120,3 +120,9 @@ summary{cursor:pointer;font-weight:600;font-size:13px;padding:4px 0}
 .meas.armed{background:var(--accent);color:var(--accent-fg);animation:pulse 1s infinite}
 @keyframes pulse{50%{opacity:.55}}
 .btlog{margin:0;padding:8px;background:var(--surface2);border-radius:8px;font:11px/1.5 'IBM Plex Mono',monospace;overflow-x:auto;white-space:pre}
+
+.lk{flex:0 0 auto;display:grid;place-items:center;border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:0 9px;color:var(--accent)}
+input[readonly]:not(.txt){opacity:.75}
+.mdl{position:fixed;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;padding:16px;z-index:60}
+.mdlb{background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:14px;padding:18px;max-width:360px;width:100%}
+.mdlb .col{display:flex;flex-direction:column;gap:8px}
