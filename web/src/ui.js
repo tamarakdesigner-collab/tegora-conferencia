@@ -590,7 +590,7 @@ function renderHome() {
     } else h += `<div class="row" style="margin-bottom:10px"><button class="btn" data-act="clientForm">+ Novo cliente</button></div>`;
     if (!S.clients.length) h += `<div class="card"><p style="margin:0 0 10px">Nenhum cliente ainda.</p><button class="btn sec sm" data-act="sampleClient">Carregar cliente de exemplo</button></div>`;
     h += `<div class="list">${S.clients.map((c, i) => `<button data-act="clientOpen" data-i="${i}" style="flex-direction:column;gap:2px"><span style="display:flex;justify-content:space-between;gap:8px;width:100%"><b style="font-size:15px">${eh(c.nome || 'Sem nome')}</b><span class="m">${c.rooms.length} ambiente${c.rooms.length === 1 ? '' : 's'}</span></span><span class="m">${eh([c.loja, c.endereco].filter(Boolean).join(' · ') || '—')}</span></button>`).join('')}</div>`;
-    if (S.clients.length) h += `<h3>Backup</h3><div class="row"><button class="btn sec sm" data-act="expJson">Salvar backup</button><label class="btn sec sm" style="display:inline-block">Abrir backup<input type="file" accept=".json,application/json" data-act="impJson" hidden></label></div>`;
+    h += `<h3>Backup</h3><div class="row">${S.clients.length ? '<button class="btn sec sm" data-act="expJson">Salvar backup</button>' : ''}<label class="btn sec sm" style="display:inline-block">Abrir backup<input type="file" accept=".json,application/json" data-act="impJson" hidden></label></div>`;
   } else {
     const c = CL();
     h += `<h2>${eh(c.nome || 'Cliente')}</h2>`;

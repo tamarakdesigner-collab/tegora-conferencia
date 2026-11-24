@@ -76,7 +76,12 @@ public class MainActivity extends Activity {
         fileCb = cb;
         camUri = null;
         Intent cam = null;
+        boolean img = false;
+        String[] acc = p.getAcceptTypes();
+        if (acc == null || acc.length == 0) img = true;
+        else for (String t : acc) if (t != null && (t.isEmpty() || t.startsWith("image"))) img = true;
         try {
+            if (!img) throw new Exception("sem câmera");
             ContentValues v = new ContentValues();
             v.put(MediaStore.Images.Media.DISPLAY_NAME, "tegora_" + System.currentTimeMillis() + ".jpg");
             v.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
@@ -95,7 +100,7 @@ public class MainActivity extends Activity {
                 go = cam;
             } else {
                 Intent pick = p.createIntent();
-                go = Intent.createChooser(pick, "Escolher foto");
+                go = Intent.createChooser(pick, img ? "Escolher foto" : "Escolher arquivo");
                 if (cam != null) go.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{cam});
             }
             startActivityForResult(go, REQ_FILE);
