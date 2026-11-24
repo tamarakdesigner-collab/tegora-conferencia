@@ -510,6 +510,11 @@ function newCeil(kind, room, extra) {
   if (kind === 'rect') Object.assign(el, { x: b.x0 + 300, y: b.y0 + 300, w: Math.min(1500, b.w - 600), h: Math.min(1000, b.h - 600) });
   return Object.assign(el, extra || {});
 }
+/* medida feita (trena ou digitada): o campo ficou travado com cadeado */
+const isMeasured = (room, it, kind) => it.src === 'laser' || !!(room.lk && room.lk[(kind === 'z' ? 'itZ' : 'itUL') + '|id=' + it.id]);
+/* lado medido da posição: 'L' (da esquerda), 'R' (da direita) ou null; só ele recebe cota */
+const measSide = (room, it) => { const v = room.lk && room.lk['itUL|id=' + it.id]; return v === 'itUR' ? 'R' : (v || it.src === 'laser') ? 'L' : null; };
+
 /* ---------- Vigas: retângulo entre paredes, referenciado pelas bordas ---------- */
 const BEAM_SNAP = 600;
 function beamRect(b) { return b.o === 'h' ? { x0: b.s0, x1: b.s1, y0: b.c0, y1: b.c0 + b.t } : { x0: b.c0, x1: b.c0 + b.t, y0: b.s0, y1: b.s1 }; }
@@ -1613,7 +1618,8 @@ function hChain(c, xs, yw, nsign, offK, colors, o) {
   return mxl;
 }
 /* cotas de todos os pontos (PDF): correntes por fileira, sem colisão */
-function ptDimsAll(c, pts, L) {
+function ptDimsAll(c, pts, L, mk) {
+  mk = mk || (() => true);
   const { G, v, K, P } = c;
   const fs = 7.2 * K;
   /* cotas: elétrica em nogueira, hidráulica em azul; coringa mede pelas bordas, não pelo eixo */
@@ -1627,7 +1633,8 @@ function ptDimsAll(c, pts, L) {
   const tH = fs * 1.5 + 2 * K;
   for (const i of info.slice().sort((a, b) => b.cz - a.cz)) {
     const z = i.it.type === 'coringa' ? i.it.z : zc(i.it);
-    const spans = [[0, i.refs[0]], [i.refs[i.refs.length - 1], L]];
+    const sd = mk(i.it, 'u'), spans = [];
+    if (sd === 'R') spans.push([i.refs[i.refs.length - 1], L]); else if (sd) spans.push([0, i.refs[0]]);
     for (const [a, b] of spans) {
       if (b - a < 1) continue;
       const txt = fmt(b - a), tw = textW(txt, fs, { font: 'mono' }) + 6 * K;
@@ -1648,7 +1655,7 @@ function ptDimsAll(c, pts, L) {
   /* alturas: do piso até o ponto (até a base, no dreno) */
   const cols2 = info.slice().sort((a, b) => a.it.u - b.it.u);
   const vg = [];
-  for (const i of cols2) { const l = vg[vg.length - 1]; if (l && Math.abs(l[0].it.u - i.it.u) <= 5) l.push(i); else vg.push([i]); }
+  for (const i of cols2.filter(q => mk(q.it, 'z'))) { const l = vg[vg.length - 1]; if (l && Math.abs(l[0].it.u - i.it.u) <= 5) l.push(i); else vg.push([i]); }
   let side = 1;
   for (let gi = 0; gi < vg.length; gi++) {
     const g = vg[gi], x = v.X(g[0].it.u);
@@ -1773,10 +1780,11 @@ function drawWall(c, room, wi, o) {
   dimLine(c, [0, H], [L, H], up, off, fmt(L), { src: room.wsrc[wi], bold: true });
   dimLine(c, [0, 0], [0, H], [-1, 0], 14, fmt(H), { src: room.Hsrc, bold: true });
   /* cotas de cada ponto, na cor da sua categoria (PDF) */
-  if (o.ptDims && pts.length) ptDimsAll(c, pts, L);
+  if (o.ptDims && pts.length) ptDimsAll(c, pts, L, o.measured ? (it, k) => o.measured(it, k) : null);
   /* cotas verticais das esquadrias */
   for (const it of ops) {
     if (!(o.allDims || o.sel === it.id)) continue;
+    if (o.measured && !o.measured(it, 'z')) continue;
     const xr = it.u + it.w, tx = [1, 0];
     if (it.z > 1) dimLine(c, [xr, 0], [xr, it.z], tx, 7, fmt(it.z), { src: it.src, size: 7.6 });
     dimLine(c, [xr, it.z], [xr, it.z + it.h], tx, 7, fmt(it.h), { src: it.src, size: 7.6 });
@@ -2031,25 +2039,24 @@ function pdfWallCol(G, room, wi, x0, cw, y0, ch) {
   G.text(x0, y0 + 6, 'PAREDE ' + wnum(room, wi), { size: 9.5, bold: true, anchor: 'start', fill: P.ink });
   G.text(x0 + cw, y0 + 6, fmt(g.L, UNIT, true) + ' × ' + fmt(room.H, UNIT, true), { size: 7.4, anchor: 'end', fill: P.mut });
   G.line(x0, y0 + 11, x0 + cw, y0 + 11, { stroke: P.faint, w: 0.6 });
-  const maxRows = 7, nRows = Math.min(items.length, maxRows), tblH = nRows ? (nRows + 1) * 11 + (items.length > maxRows ? 10 : 0) + 8 : 0;
+  const nRows = items.length, rh = nRows ? Math.max(6.4, Math.min(11, (ch * 0.4) / (nRows + 1))) : 11, tfs = Math.min(6.6, rh * 0.62), tblH = nRows ? (nRows + 1) * rh + 8 : 0;
   const mw = 70, mh = 52;
   drawMini({ G, v: View.fit(bbox(room.pts), { x: x0 + cw - mw, y: y0 + 15, w: mw, h: mh }, 3), K: 1, P, hit: false }, room, wi);
   G.text(x0 + cw - mw - 4, y0 + 22, 'PLANTA CHAVE', { size: 5.8, bold: true, anchor: 'end', fill: P.accent });
   G.text(x0 + cw - mw - 4, y0 + 30, 'seta: sentido da vista', { size: 5.5, anchor: 'end', fill: P.mut });
   const box = { x: x0 + 34, y: y0 + 16 + 70, w: cw - 34 - 30, h: ch - 16 - 70 - 14 - tblH };
   const vv = View.fit({ x0: 0, y0: 0, x1: g.L, y1: room.H + wallTopExtra(room) }, box, 0);
-  drawWall({ G, v: vv, K: 1, P, hit: false }, room, wi, { allDims: true, ptDims: true });
+  drawWall({ G, v: vv, K: 1, P, hit: false }, room, wi, { allDims: true, ptDims: true, measured: (it, k) => k === 'u' ? (it.kind === 'op' ? isMeasured(room, it, 'u') : measSide(room, it)) : isMeasured(room, it, k) });
   if (nRows) {
     const ty = y0 + ch - tblH + 4;
     const cols = [{ h: 'Id', w: 22 }, { h: 'Item', w: cw - 22 - 38 - 44 - 44 - 44 - 56 }, { h: 'Cat.', w: 38 }, { h: 'Esq.', w: 44, a: 'r' }, { h: 'Dir.', w: 44, a: 'r' }, { h: 'Altura', w: 44, a: 'r' }, { h: 'L × A', w: 56, a: 'r' }];
-    const rows = items.slice(0, maxRows).map(it => {
+    const rows = items.map(it => {
       const tid = it.kind === 'op' ? lab.tags[it.id] : String(lab.nums[it.id]);
-      const left = it.kind === 'op' ? it.u : it.u - it.w / 2, right = g.L - (it.kind === 'op' ? it.u + it.w : it.u + it.w / 2);
+      const left = it.u, right = g.L - (it.kind === 'op' ? it.u + it.w : it.u);
       const cat = CATS.find(c => c.id === LIBMAP[it.type].cat).short;
-      return [tid, it.name, cat.slice(0, 5), fmt(left), fmt(right), it.kind === 'op' ? (it.z ? fmt(it.z) : 'piso') : fmt(it.z), fmt(it.w) + '×' + fmt(it.h)];
+      return [tid, it.name, cat.slice(0, 5), (it.kind === 'op' ? isMeasured(room, it, 'u') : measSide(room, it) === 'L') ? fmt(left) : '—', (it.kind === 'op' ? isMeasured(room, it, 'u') : measSide(room, it) === 'R') ? fmt(right) : '—', isMeasured(room, it, 'z') ? (it.kind === 'op' ? (it.z ? fmt(it.z) : 'piso') : fmt(it.z)) : '—', fmt(it.w) + '×' + fmt(it.h)];
     });
-    pdfTable(G, x0, ty, cols, rows, { rh: 11, fs: 6.6 });
-    if (items.length > maxRows) G.text(x0, ty + (nRows + 1) * 11 + 6, '+ ' + (items.length - maxRows) + ' itens não listados.', { size: 6.3, anchor: 'start', fill: P.mut });
+    pdfTable(G, x0, ty, cols, rows, { rh, fs: tfs });
   }
 }
 function pdfWallPage(doc, ctx, room, wi, wj, total) {
@@ -3119,7 +3126,7 @@ document.addEventListener('change', e => {
   UI.lastOk = undefined;
   if (fn) fn(el, e);
   /* medida inserida: trava sozinha (cadeado fechado ao lado) */
-  if (el.dataset.lk && UI.lastOk === true && S.cc != null) { const r = R(); r.lk = r.lk || {}; r.lk[el.dataset.lk] = true; persist(); renderAll(); }
+  if (el.dataset.lk && UI.lastOk === true && S.cc != null) { const r = R(); r.lk = r.lk || {}; r.lk[el.dataset.lk] = el.dataset.act; persist(); renderAll(); }
   delete el.dataset.src;
 });
 

@@ -508,7 +508,8 @@ function hChain(c, xs, yw, nsign, offK, colors, o) {
   return mxl;
 }
 /* cotas de todos os pontos (PDF): correntes por fileira, sem colisão */
-function ptDimsAll(c, pts, L) {
+function ptDimsAll(c, pts, L, mk) {
+  mk = mk || (() => true);
   const { G, v, K, P } = c;
   const fs = 7.2 * K;
   /* cotas: elétrica em nogueira, hidráulica em azul; coringa mede pelas bordas, não pelo eixo */
@@ -522,7 +523,8 @@ function ptDimsAll(c, pts, L) {
   const tH = fs * 1.5 + 2 * K;
   for (const i of info.slice().sort((a, b) => b.cz - a.cz)) {
     const z = i.it.type === 'coringa' ? i.it.z : zc(i.it);
-    const spans = [[0, i.refs[0]], [i.refs[i.refs.length - 1], L]];
+    const sd = mk(i.it, 'u'), spans = [];
+    if (sd === 'R') spans.push([i.refs[i.refs.length - 1], L]); else if (sd) spans.push([0, i.refs[0]]);
     for (const [a, b] of spans) {
       if (b - a < 1) continue;
       const txt = fmt(b - a), tw = textW(txt, fs, { font: 'mono' }) + 6 * K;
@@ -543,7 +545,7 @@ function ptDimsAll(c, pts, L) {
   /* alturas: do piso até o ponto (até a base, no dreno) */
   const cols2 = info.slice().sort((a, b) => a.it.u - b.it.u);
   const vg = [];
-  for (const i of cols2) { const l = vg[vg.length - 1]; if (l && Math.abs(l[0].it.u - i.it.u) <= 5) l.push(i); else vg.push([i]); }
+  for (const i of cols2.filter(q => mk(q.it, 'z'))) { const l = vg[vg.length - 1]; if (l && Math.abs(l[0].it.u - i.it.u) <= 5) l.push(i); else vg.push([i]); }
   let side = 1;
   for (let gi = 0; gi < vg.length; gi++) {
     const g = vg[gi], x = v.X(g[0].it.u);
@@ -668,10 +670,11 @@ function drawWall(c, room, wi, o) {
   dimLine(c, [0, H], [L, H], up, off, fmt(L), { src: room.wsrc[wi], bold: true });
   dimLine(c, [0, 0], [0, H], [-1, 0], 14, fmt(H), { src: room.Hsrc, bold: true });
   /* cotas de cada ponto, na cor da sua categoria (PDF) */
-  if (o.ptDims && pts.length) ptDimsAll(c, pts, L);
+  if (o.ptDims && pts.length) ptDimsAll(c, pts, L, o.measured ? (it, k) => o.measured(it, k) : null);
   /* cotas verticais das esquadrias */
   for (const it of ops) {
     if (!(o.allDims || o.sel === it.id)) continue;
+    if (o.measured && !o.measured(it, 'z')) continue;
     const xr = it.u + it.w, tx = [1, 0];
     if (it.z > 1) dimLine(c, [xr, 0], [xr, it.z], tx, 7, fmt(it.z), { src: it.src, size: 7.6 });
     dimLine(c, [xr, it.z], [xr, it.z + it.h], tx, 7, fmt(it.h), { src: it.src, size: 7.6 });

@@ -361,6 +361,11 @@ function newCeil(kind, room, extra) {
   if (kind === 'rect') Object.assign(el, { x: b.x0 + 300, y: b.y0 + 300, w: Math.min(1500, b.w - 600), h: Math.min(1000, b.h - 600) });
   return Object.assign(el, extra || {});
 }
+/* medida feita (trena ou digitada): o campo ficou travado com cadeado */
+const isMeasured = (room, it, kind) => it.src === 'laser' || !!(room.lk && room.lk[(kind === 'z' ? 'itZ' : 'itUL') + '|id=' + it.id]);
+/* lado medido da posição: 'L' (da esquerda), 'R' (da direita) ou null; só ele recebe cota */
+const measSide = (room, it) => { const v = room.lk && room.lk['itUL|id=' + it.id]; return v === 'itUR' ? 'R' : (v || it.src === 'laser') ? 'L' : null; };
+
 /* ---------- Vigas: retângulo entre paredes, referenciado pelas bordas ---------- */
 const BEAM_SNAP = 600;
 function beamRect(b) { return b.o === 'h' ? { x0: b.s0, x1: b.s1, y0: b.c0, y1: b.c0 + b.t } : { x0: b.c0, x1: b.c0 + b.t, y0: b.s0, y1: b.s1 }; }

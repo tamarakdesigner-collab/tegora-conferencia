@@ -922,7 +922,7 @@ document.addEventListener('change', e => {
   UI.lastOk = undefined;
   if (fn) fn(el, e);
   /* medida inserida: trava sozinha (cadeado fechado ao lado) */
-  if (el.dataset.lk && UI.lastOk === true && S.cc != null) { const r = R(); r.lk = r.lk || {}; r.lk[el.dataset.lk] = true; persist(); renderAll(); }
+  if (el.dataset.lk && UI.lastOk === true && S.cc != null) { const r = R(); r.lk = r.lk || {}; r.lk[el.dataset.lk] = el.dataset.act; persist(); renderAll(); }
   delete el.dataset.src;
 });
 
